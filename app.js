@@ -15,7 +15,7 @@
     requireQr: false,
     requirePhoto: false,
     continuousVoice: false,
-    googleClientId: '',
+    googleClientId: '400634410081-usp328ku7tm6aeu9pmu494k0te0h4h7r.apps.googleusercontent.com',
     gasUrl: DEFAULT_GAS,
     waterCount: 0,
     lastCheckin: '',
@@ -102,10 +102,11 @@
   }
 
   function initGoogleSignIn() {
-    if (!state.googleClientId || typeof google === 'undefined' || !google.accounts) return;
+    const cid = state.googleClientId || '400634410081-usp328ku7tm6aeu9pmu494k0te0h4h7r.apps.googleusercontent.com';
+    if (typeof google === 'undefined' || !google.accounts) { setTimeout(initGoogleSignIn, 500); return; }
     try {
       google.accounts.id.initialize({
-        client_id: state.googleClientId,
+        client_id: cid,
         callback: (res) => {
           const info = decodeJwt(res.credential);
           state.userName = info.name || state.userName;
@@ -183,9 +184,7 @@
       document.getElementById('cfgReqQr').checked = !!state.requireQr;
       document.getElementById('cfgReqPhoto').checked = !!state.requirePhoto;
       document.getElementById('cfgContVoice').checked = !!state.continuousVoice;
-      document.getElementById('cfgGoogleClientId').value = state.googleClientId || '';
-      document.getElementById('cfgGasUrl').value = state.gasUrl || DEFAULT_GAS;
-    }
+          }
   }
 
   // ---- Render ----
@@ -589,9 +588,7 @@
     state.requireQr = document.getElementById('cfgReqQr').checked;
     state.requirePhoto = document.getElementById('cfgReqPhoto').checked;
     state.continuousVoice = document.getElementById('cfgContVoice').checked;
-    state.googleClientId = document.getElementById('cfgGoogleClientId').value.trim();
-    state.gasUrl = document.getElementById('cfgGasUrl').value.trim() || DEFAULT_GAS;
-    saveState();
+        saveState();
     renderAll();
     toast('Configurações salvas!');
   });
