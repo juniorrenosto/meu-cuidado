@@ -3,1040 +3,395 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Meu Cuidado — Assistente de Saúde &amp; Rotinas</title>
+  <title>Meu Cuidado — Saúde, Rotinas &amp; Autonomia</title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0F766E" />
+  <link rel="apple-touch-icon" href="alexa_icon_512x512.png" />
   <style>
-    body { font-family: 'Inter', sans-serif; }
-    @keyframes urgentPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.75); transform: scale(1); }
-      50% { box-shadow: 0 0 0 18px rgba(220, 38, 38, 0); transform: scale(1.015); }
-    }
-    .urgent-alert-pulse { animation: urgentPulse 1.2s infinite; }
-    @keyframes micPulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(13, 148, 136, 0.6); }
-      50% { box-shadow: 0 0 0 16px rgba(13, 148, 136, 0); }
-    }
-    .mic-listening { animation: micPulse 1s infinite; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+    body.low-vision { font-size: 1.18rem; }
+    body.low-vision .lv-text { font-size: 1.25rem !important; line-height: 1.5 !important; }
+    body.low-vision .lv-btn { padding-top: 1.15rem !important; padding-bottom: 1.15rem !important; font-size: 1.2rem !important; }
+    @keyframes softPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(15,118,110,0.35); } 50% { box-shadow: 0 0 0 12px rgba(15,118,110,0); } }
+    @keyframes highPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.65); } 50% { box-shadow: 0 0 0 14px rgba(220,38,38,0); } }
+    @keyframes breathAnim { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.28); } }
+    .mic-active { animation: softPulse 1.2s infinite; }
+    .alert-high { animation: highPulse 1.2s infinite; }
+    .breath-circle { animation: breathAnim 8s ease-in-out infinite; }
   </style>
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#0D9488">
-  <link rel="apple-touch-icon" href="alexa_icon_512x512.png">
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen">
 
-  <!-- Tela de Entrada (Onboarding / Splash Acessível) -->
-  <div id="welcomeScreen" class="fixed inset-0 z-50 bg-gradient-to-b from-teal-900 via-teal-800 to-slate-900 text-white flex items-center justify-center p-4 overflow-y-auto">
-    <div class="max-w-md w-full bg-white text-slate-900 rounded-3xl p-6 shadow-2xl space-y-5 text-center">
-      <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-teal-600 text-white text-4xl shadow-md mx-auto">✚</div>
-      <div>
-        <h2 class="text-3xl font-extrabold text-slate-900">Meu Cuidado</h2>
-        <p class="text-base text-slate-600 mt-1">Seu apoio diário para remédios, consultas e rotinas.</p>
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-lg text-sm font-medium max-w-sm text-center"></div>
+
+  <!-- MODAL 1: Confirmação em 2 Tempos / QR Code / Foto -->
+  <div id="confirmModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div id="confirmBox" class="bg-white border-4 border-teal-600 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="text-center">
+        <p class="text-xs font-semibold uppercase tracking-wider text-teal-700">Confirmação Segura</p>
+        <h2 id="cmMedName" class="text-2xl font-bold text-slate-900 mt-1"></h2>
+        <p id="cmMedInfo" class="text-sm text-slate-600 mt-1"></p>
       </div>
 
-      <div class="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-left space-y-2">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Escolha o conforto visual (Perfil Sensorial):</p>
-        <div class="grid grid-cols-2 gap-2">
-          <button id="welcomeSensorySoft" class="py-2.5 px-3 rounded-xl border-2 border-teal-600 bg-teal-50 text-teal-900 text-sm font-bold transition">
-            🌿 Modo Suave<br><span class="text-xs font-normal">Sem piscar (TEA/Sensível)</span>
-          </button>
-          <button id="welcomeSensoryHigh" class="py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-bold transition">
-            🔆 Alto Destaque<br><span class="text-xs font-normal">Alerta reforçado</span>
-          </button>
+      <!-- Passo 1: Indo pegar -->
+      <div id="cmStep1" class="space-y-3">
+        <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          Passo 1: Vá até o local do remédio e pegue um copo de água.
+        </p>
+        <button id="btnCmGoing" class="lv-btn w-full py-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl transition">
+          1. Estou indo pegar agora
+        </button>
+        <button id="btnCmSnooze" class="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-xl text-sm">
+          Adiar 15 minutos
+        </button>
+      </div>
+
+      <!-- Passo 2: Aguardo + Prova opcional (QR / Foto) -->
+      <div id="cmStep2" class="hidden space-y-3">
+        <div id="cmTimerBox" class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm text-center font-medium">
+          Aguarde <span id="cmCountdown">15</span>s enquanto você toma com água...
+        </div>
+
+        <!-- Leitor QR Code (se habilitado) -->
+        <div id="cmQrBox" class="hidden space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <p class="text-xs font-semibold text-slate-700">Aponte a câmera para o QR Code da caixa:</p>
+          <video id="qrVideo" class="w-full h-44 bg-black rounded-lg object-cover" playsinline muted></video>
+          <p id="qrStatus" class="text-xs text-teal-700 font-medium">Procurando QR Code...</p>
+        </div>
+
+        <!-- Foto da dose (se habilitada) -->
+        <div id="cmPhotoBox" class="hidden space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <p class="text-xs font-semibold text-slate-700">Foto rápida da dose na mão:</p>
+          <input id="photoInput" type="file" accept="image/*" capture="environment" class="w-full text-xs" />
+          <p id="photoStatus" class="text-xs text-slate-500">Nenhuma foto anexada.</p>
+        </div>
+
+        <button id="btnCmFinal" disabled class="lv-btn w-full py-3.5 bg-emerald-600 disabled:bg-slate-300 disabled:text-slate-500 hover:bg-emerald-700 text-white font-semibold rounded-xl transition">
+          2. Já tomei o remédio
+        </button>
+        <button id="btnCmCancel" class="w-full py-2 text-xs text-slate-500 hover:text-slate-800">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Preciso de Ajuda Agora (Respiração / Triagem + SAMU + Rede de Apoio + Cartão) -->
+  <div id="helpModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">Preciso de Ajuda Agora</h2>
+        <button id="btnCloseHelp" class="text-sm text-slate-500 hover:text-slate-900 font-semibold">Fechar</button>
+      </div>
+
+      <!-- Menu inicial de ajuda -->
+      <div id="helpMenu" class="space-y-2.5">
+        <button id="btnHelpCalm" class="lv-btn w-full py-3.5 px-4 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-950 font-semibold rounded-xl text-left">
+          🌿 Estou ansioso(a) / sobrecarregado(a) — Acalmar
+        </button>
+        <button id="btnHelpSick" class="lv-btn w-full py-3.5 px-4 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-950 font-semibold rounded-xl text-left">
+          🩺 Estou passando mal — Checar sinais
+        </button>
+        <button id="btnHelpCard" class="lv-btn w-full py-3.5 px-4 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-900 font-semibold rounded-xl text-left">
+          🪪 Mostrar meu Cartão de Emergência
+        </button>
+        <div class="grid grid-cols-2 gap-2.5 pt-2">
+          <a id="linkCallSupport" href="tel:" class="py-3 px-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-center text-sm">📞 Ligar Apoio</a>
+          <a href="tel:192" class="py-3 px-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl text-center text-sm">🚑 SAMU 192</a>
         </div>
       </div>
 
-      <div class="space-y-3">
-        <button id="btnEnterVoice" class="w-full py-4 px-5 bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white text-lg font-extrabold rounded-2xl shadow-lg transition flex items-center justify-center gap-2">
-          <span>🎙️</span> Entrar Conversando (Voz)
-        </button>
-        <button id="btnEnterTouch" class="w-full py-4 px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-lg font-extrabold rounded-2xl shadow transition flex items-center justify-center gap-2">
-          <span>👆</span> Entrar Tocando na Tela
-        </button>
+      <!-- Subtela: Respiração 4-4-4 -->
+      <div id="helpCalmView" class="hidden text-center space-y-5 py-3">
+        <p class="text-sm text-slate-600">Respire devagar acompanhando o círculo:</p>
+        <div class="w-32 h-32 mx-auto rounded-full bg-teal-100 border-4 border-teal-600 flex items-center justify-center breath-circle">
+          <span class="text-teal-900 font-bold text-sm">Inspire<br>e Solte</span>
+        </div>
+        <button class="help-back w-full py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-700">Voltar</button>
       </div>
 
-      <div class="flex items-center justify-center gap-4 pt-1 text-sm">
-        <button id="btnEnterSupport" class="text-teal-700 font-bold hover:underline">🤝 Sou da Rede de Apoio</button>
-        <span class="text-slate-300">•</span>
-        <button id="btnEnterConfig" class="text-slate-600 font-semibold hover:underline">⚙️ Configurações</button>
+      <!-- Subtela: Triagem Rápida -->
+      <div id="helpSickView" class="hidden space-y-3">
+        <p class="text-sm font-semibold text-slate-800">Você está sentindo algum destes sinais agora?</p>
+        <ul class="text-sm text-slate-700 space-y-1.5 bg-rose-50 p-3 rounded-xl border border-rose-200">
+          <li>• Dor forte no peito ou falta de ar</li>
+          <li>• Tontura intensa, desmaio ou queda</li>
+          <li>• Confusão mental ou fala enrolada</li>
+        </ul>
+        <p class="text-xs text-slate-600">Se respondeu SIM a qualquer um, ligue imediatamente para o SAMU ou sua rede de apoio.</p>
+        <div class="grid grid-cols-2 gap-2.5">
+          <a href="tel:192" class="py-3 bg-rose-600 text-white font-bold rounded-xl text-center text-sm">Ligar SAMU 192</a>
+          <a id="linkCallSupport2" href="tel:" class="py-3 bg-slate-900 text-white font-bold rounded-xl text-center text-sm">Ligar Apoio</a>
+        </div>
+        <button class="help-back w-full py-2 bg-slate-100 rounded-xl text-sm text-slate-700">Voltar</button>
+      </div>
+
+      <!-- Subtela: Cartão de Emergência -->
+      <div id="helpCardView" class="hidden space-y-3">
+        <div class="p-4 rounded-xl bg-slate-900 text-white space-y-2 text-sm">
+          <p class="text-xs uppercase tracking-wider text-teal-300 font-bold">Cartão de Emergência Médica</p>
+          <p><strong>Nome:</strong> <span id="ecName">-</span></p>
+          <p><strong>Alergias / Condições:</strong> <span id="ecAllergies">Nenhuma informada</span></p>
+          <p><strong>Medicações em uso:</strong> <span id="ecMeds">-</span></p>
+          <p><strong>Última Pressão:</strong> <span id="ecBP">--/--</span></p>
+          <p><strong>Contato de Confiança:</strong> <span id="ecPhone">Não cadastrado</span></p>
+        </div>
+        <button class="help-back w-full py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-700">Voltar</button>
       </div>
     </div>
   </div>
 
-
-  <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 hidden bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl text-base font-semibold max-w-md text-center"></div>
-
-  <!-- Alerta Visual Pulsante Vermelho (Modal de Alto Impacto) -->
-  <div id="urgentModal" class="fixed inset-0 z-50 hidden bg-red-950/90 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white border-8 border-red-600 rounded-3xl max-w-md w-full p-6 text-center shadow-2xl urgent-alert-pulse">
-      <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-600 text-white text-4xl mb-4">⏰</div>
-      <p class="text-red-700 font-extrabold text-xl uppercase tracking-wide mb-1">Hora do Remédio!</p>
-      <h2 id="urgentMedName" class="text-3xl font-extrabold text-slate-900 mb-2">Losartana 50mg</h2>
-      <p id="urgentMedInfo" class="text-xl text-slate-700 font-semibold mb-6">Tomar 1 comprimido • 08:00</p>
-      <div class="space-y-3">
-        <button id="btnUrgentConfirm" class="w-full py-5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-2xl font-extrabold rounded-2xl shadow-lg transition">
-          ✓ TOMEI O REMÉDIO
-        </button>
-        <button id="btnUrgentSnooze" class="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white text-xl font-bold rounded-2xl transition">
-          ⏳ ADIAR 10 MINUTOS
-        </button>
+  <!-- MODAL 3: Entrevista Pós-Consulta -->
+  <div id="postConsultModal" class="fixed inset-0 z-50 hidden bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-bold text-slate-900">Registro Pós-Consulta</h2>
+        <button id="btnClosePostConsult" class="text-sm text-slate-500">Fechar</button>
       </div>
+      <div class="space-y-3 text-sm">
+        <label class="flex items-center gap-2 font-medium text-slate-800">
+          <input id="pcChangedMed" type="checkbox" class="w-4 h-4 accent-teal-700" /> O médico mudou algum remédio ou horário?
+        </label>
+        <input id="pcMedText" type="text" placeholder="Qual mudança? (ex.: Trocar Losartana para 2x ao dia)" class="w-full px-3 py-2 rounded-lg border border-slate-300" />
+        <input id="pcExamName" type="text" placeholder="Pediu algum exame? (ex.: Sangue em jejum)" class="w-full px-3 py-2 rounded-lg border border-slate-300" />
+        <div class="grid grid-cols-3 gap-2">
+          <input id="pcExamDate" type="date" class="px-2 py-2 rounded-lg border border-slate-300 text-xs" />
+          <input id="pcExamTime" type="time" class="px-2 py-2 rounded-lg border border-slate-300 text-xs" />
+          <input id="pcFastingHours" type="number" placeholder="Jejum (h)" class="px-2 py-2 rounded-lg border border-slate-300 text-xs" />
+        </div>
+        <input id="pcNewChecks" type="text" placeholder="Novas medições? (ex.: Pressão 08:00, Glicose 07:00)" class="w-full px-3 py-2 rounded-lg border border-slate-300" />
+        <input id="pcReturnDate" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-300" title="Data do próximo retorno" />
+      </div>
+      <button id="btnSavePostConsult" class="w-full py-3 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl text-sm">Salvar e Avisar Rede de Apoio</button>
     </div>
   </div>
 
-  <!-- Header -->
-  <header class="bg-teal-800 text-white sticky top-0 z-30 shadow-md">
-    <div class="max-w-4xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+  <!-- TELA 0: CONFIGURAÇÃO INICIAL -->
+  <section id="setupScreen" class="min-h-screen flex items-center justify-center p-4 bg-slate-100">
+    <div class="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
       <div class="flex items-center gap-3">
-        <span class="text-3xl" aria-hidden="true">🩺</span>
+        <div class="w-11 h-11 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-xl">+</div>
         <div>
-          <h1 class="text-xl font-extrabold leading-tight cursor-pointer" id="brandHome" title="Voltar à Tela de Entrada">Meu Cuidado</h1>
-          <p class="text-xs text-teal-100">Rotinas, Medicações, Voz &amp; Rede de Apoio</p>
+          <h1 class="text-xl font-bold text-slate-900">Meu Cuidado</h1>
+          <p class="text-xs text-slate-500">Autonomia diária, saúde e rotinas acessíveis</p>
         </div>
       </div>
-      <div class="flex items-center gap-2 bg-teal-900/70 p-1 rounded-xl">
-        <button id="tabPessoa" class="px-4 py-2 rounded-lg text-sm font-bold bg-white text-teal-900 shadow transition">
-          🌟 Meu Dia
-        </button>
-        <button id="tabCuidador" class="px-4 py-2 rounded-lg text-sm font-bold text-teal-100 hover:bg-teal-700 transition">
-          🤝 Rede de Apoio
-        </button>
-        <button id="tabConfig" class="px-3 py-2 rounded-lg text-sm font-bold text-teal-100 hover:bg-teal-700 transition">
-          ⚙️ Config.
-        </button>
+
+      <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">1. Seus Dados e Contato de Confiança</p>
+        <div id="googleBtnContainer" class="flex justify-center"></div>
+        <div id="googleUserBadge" class="hidden flex items-center gap-2.5 bg-white p-2 rounded-lg border border-teal-200 text-xs">
+          <img id="googleAvatar" src="" alt="" class="w-8 h-8 rounded-full" />
+          <div><p id="googleName" class="font-semibold"></p><p id="googleEmail" class="text-slate-500"></p></div>
+        </div>
+        <input id="setupName" type="text" placeholder="Seu nome (ex.: Maria)" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white" />
+        <input id="setupSupportPhone" type="tel" placeholder="Telefone do apoio para emergências (ex.: 51999999999)" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white" />
+        <input id="setupSupportEmail" type="email" placeholder="E-mail da Rede de Apoio (opcional)" class="w-full px-3 py-2.5 rounded-lg border border-slate-300 text-sm bg-white" />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">2. Conforto Visual e Voz</p>
+        <div class="grid grid-cols-3 gap-2 text-xs">
+          <button type="button" data-smode="soft" class="setup-mode p-2.5 rounded-xl border-2 border-teal-700 bg-teal-50 text-left font-semibold text-teal-900">Modo Suave<span class="block font-normal text-slate-600 mt-0.5">TEA/Sensível</span></button>
+          <button type="button" data-smode="high" class="setup-mode p-2.5 rounded-xl border border-slate-200 bg-white text-left font-semibold text-slate-800">Alto Destaque<span class="block font-normal text-slate-500 mt-0.5">Alerta forte</span></button>
+          <button type="button" data-smode="lowvision" class="setup-mode p-2.5 rounded-xl border border-slate-200 bg-white text-left font-semibold text-slate-800">Baixa Visão<span class="block font-normal text-slate-500 mt-0.5">Letra GG + Voz</span></button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <button id="btnFinishSetupVoice" class="w-full py-3.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl text-sm">Entrar com Voz Ativa</button>
+        <button id="btnFinishSetup" class="w-full py-3 bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 font-semibold rounded-xl text-sm">Entrar na Tela Principal</button>
       </div>
     </div>
-  </header>
+  </section>
 
-  <main class="max-w-4xl mx-auto px-4 py-6 space-y-6">
-
-    <!-- ==================== MEU DIA (MODO GUIADO) ==================== -->
-    <section id="viewPessoa" class="space-y-6">
-
-      <!-- Barra de Progresso do Dia (Tiimo + MyTherapy) -->
-      <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-        <div class="flex-1 min-w-[200px]">
-          <div class="flex justify-between text-sm font-bold text-slate-700 mb-1">
-            <span>📅 Progresso de Hoje</span>
-            <span id="dailyProgressLabel">0%</span>
-          </div>
-          <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
-            <div id="dailyProgressBar" class="bg-teal-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
-          </div>
-        </div>
-        <button id="btnWaterCheckin" class="px-4 py-2.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 rounded-2xl text-sm font-extrabold transition flex items-center gap-2">
-          <span>💧</span> Bebi Água (<span id="waterCount">0</span>)
-        </button>
-      </div>
-
-      <!-- Saudação e Comando de Voz (Skill no Celular) -->
-      <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+  <!-- APP PRINCIPAL -->
+  <div id="appShell" class="hidden">
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-9 h-9 rounded-lg bg-teal-700 text-white flex items-center justify-center font-bold text-lg">+</div>
           <div>
-            <p class="text-sm font-bold text-teal-700 uppercase tracking-wider">Assistente de Voz Ativo</p>
-            <h2 id="greetingTitle" class="text-2xl font-extrabold text-slate-900">Olá! Como posso ajudar hoje?</h2>
+            <span class="font-bold text-slate-900 text-base block leading-none">Meu Cuidado</span>
+            <span id="headerUserLabel" class="text-xs text-slate-500">Saúde &amp; Rotinas</span>
           </div>
-          <button id="btnTestAlert" class="px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-sm shadow transition">
-            🚨 Testar Alerta Vermelho
+        </div>
+        <nav class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs sm:text-sm">
+          <button data-tab="viewHome" class="nav-tab px-3 py-1.5 rounded-lg font-semibold bg-white text-slate-900 shadow-sm">Meu Dia</button>
+          <button data-tab="viewSupport" class="nav-tab px-3 py-1.5 rounded-lg font-medium text-slate-600">Rede de Apoio</button>
+          <button data-tab="viewConfig" class="nav-tab px-3 py-1.5 rounded-lg font-medium text-slate-600">Config.</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-4 py-5 space-y-5">
+
+      <!-- TAB 1: MEU DIA -->
+      <section id="viewHome" class="space-y-4">
+        <!-- Barra Superior de Autonomia: Ajuda + Estou Bem + Água -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <button id="btnNeedHelp" class="lv-btn py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm shadow-sm">Preciso de Ajuda Agora</button>
+          <button id="btnImOk" class="lv-btn py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm shadow-sm">👍 Estou bem hoje</button>
+          <button id="btnWater" class="lv-btn py-3 px-4 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 font-semibold rounded-xl text-sm">💧 Água: <span id="waterCount">0</span></button>
+        </div>
+
+        <!-- CARD "AGORA" (Foco Único — Zero sobrecarga) -->
+        <div class="bg-white rounded-2xl border-2 border-teal-600 p-5 space-y-3 shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold uppercase tracking-wider text-teal-700">Agora (Próximo Passo)</span>
+            <span id="progressText" class="text-xs font-semibold text-slate-500">0/0</span>
+          </div>
+          <div id="nowCardContent" class="lv-text text-base font-semibold text-slate-900"></div>
+          <div id="nowCardActions" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- Assistente por Voz (Área Grande para Baixa Visão) -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          <button id="btnVoice" class="lv-btn w-full py-5 px-4 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 transition">
+            <span>🎙️</span><span id="voiceLabel">Falar com o Assistente (Ouvir / Cadastrar)</span>
           </button>
-        </div>
-
-        <button id="btnVoiceSkill" class="w-full py-5 px-6 bg-teal-700 hover:bg-teal-800 active:scale-[0.99] text-white rounded-2xl shadow-lg flex items-center justify-center gap-3 text-xl font-extrabold transition">
-          <span class="text-3xl">🎙️</span>
-          <span id="voiceBtnLabel">FALAR COM O AGENTE ("Me ajude a lembrar")</span>
-        </button>
-
-        <div id="voiceTranscriptBox" class="hidden bg-teal-50 border border-teal-200 rounded-2xl p-4 text-teal-950">
-          <p class="text-xs font-bold uppercase text-teal-700 mb-1">Você disse / Resposta do Agente:</p>
-          <p id="voiceTranscriptText" class="text-lg font-semibold"></p>
-        </div>
-
-        <!-- Atalhos de Voz / Toque Rápido -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          <button data-cmd="lembrar" class="quick-cmd py-3 px-3 bg-slate-100 hover:bg-teal-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
-            💊 Meus Remédios
-          </button>
-          <button data-cmd="novo_remedio" class="quick-cmd py-3 px-3 bg-slate-100 hover:bg-teal-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
-            ➕ Novo Remédio
-          </button>
-          <button data-cmd="pressao" class="quick-cmd py-3 px-3 bg-slate-100 hover:bg-teal-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
-            ❤️ Anotar Pressão
-          </button>
-          <button data-cmd="consulta" class="quick-cmd py-3 px-3 bg-slate-100 hover:bg-teal-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800">
-            📅 Nova Consulta
-          </button>
-        </div>
-      </div>
-
-      <!-- Assistente Conversacional Guiado (Perguntas Passo-a-Passo) -->
-      <div id="wizardCard" class="bg-gradient-to-br from-teal-50 to-white rounded-3xl p-5 shadow-sm border-2 border-teal-200 space-y-4">
-        <div class="flex items-center justify-between">
-          <span class="px-3 py-1 bg-teal-700 text-white text-xs font-extrabold rounded-full uppercase">Conversa Guiada</span>
-          <button id="btnSpeakQuestion" class="text-sm font-bold text-teal-800 hover:underline">🔊 Ouvir pergunta</button>
-        </div>
-        <h3 id="wizardQuestion" class="text-2xl font-extrabold text-slate-900">Qual é o seu nome completo?</h3>
-        <p id="wizardHint" class="text-base text-slate-600">Vou organizar sua agenda diária e avisar sua rede de apoio se precisar.</p>
-        <div class="flex flex-col sm:flex-row gap-3">
-          <input id="wizardInput" type="text" placeholder="Digite aqui ou use o microfone..." class="flex-1 text-xl px-4 py-4 rounded-2xl border-2 border-slate-300 focus:border-teal-600 focus:outline-none bg-white" />
-          <button id="btnWizardNext" class="px-8 py-4 bg-teal-700 hover:bg-teal-800 text-white text-xl font-extrabold rounded-2xl shadow transition">
-            Continuar →
-          </button>
-        </div>
-        <div class="flex items-center justify-between text-xs text-slate-500 pt-1">
-          <span id="wizardStepLabel">Passo 1 de 5</span>
-          <button id="btnWizardReset" class="underline hover:text-slate-800">Recomeçar cadastro de remédio</button>
-        </div>
-      </div>
-
-      <!-- Agenda de Hoje (Remédios + Rotinas) -->
-      <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="text-2xl font-extrabold text-slate-900">📋 Sua Agenda de Hoje</h3>
-          <span id="todayProgressBadge" class="px-3 py-1 bg-emerald-100 text-emerald-800 font-extrabold rounded-full text-sm">0/0 tomados</span>
-        </div>
-        <div id="elderMedList" class="space-y-3"></div>
-      </div>
-
-      <!-- Registro Rápido de Pressão Arterial -->
-      <div id="vitalsCard" class="bg-white rounded-3xl p-5 shadow-sm border border-slate-200 space-y-4">
-        <h3 class="text-2xl font-extrabold text-slate-900">❤️ Registrar Pressão Arterial</h3>
-        <p class="text-base text-slate-600">Digite os dois números (ex.: 12 e 8, ou 120 e 80) ou fale no microfone: <em>"Minha pressão ficou 13 por 8"</em>.</p>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label for="inputSys" class="block text-sm font-bold text-slate-700 mb-1">Máxima (Sistólica)</label>
-            <input id="inputSys" type="number" placeholder="120" class="w-full text-2xl font-bold px-4 py-3 rounded-2xl border-2 border-slate-300 focus:border-teal-600 focus:outline-none" />
-          </div>
-          <div>
-            <label for="inputDia" class="block text-sm font-bold text-slate-700 mb-1">Mínima (Diastólica)</label>
-            <input id="inputDia" type="number" placeholder="80" class="w-full text-2xl font-bold px-4 py-3 rounded-2xl border-2 border-slate-300 focus:border-teal-600 focus:outline-none" />
-          </div>
-        </div>
-        <button id="btnSaveVitals" class="w-full py-4 bg-rose-600 hover:bg-rose-700 text-white text-xl font-extrabold rounded-2xl shadow transition">
-          Salvar Pressão Agora
-        </button>
-      </div>
-
-    </section>
-
-    <!-- ==================== REDE DE APOIO / ACOMPANHANTE ==================== -->
-    <section id="viewCuidador" class="hidden space-y-6">
-
-      <!-- KPIs de Monitoramento -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <p class="text-xs font-bold text-slate-500 uppercase">Adesão Hoje</p>
-          <p id="kpiAdherence" class="text-3xl font-extrabold text-teal-700 mt-1">0%</p>
-        </div>
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <p class="text-xs font-bold text-slate-500 uppercase">Pendentes</p>
-          <p id="kpiPending" class="text-3xl font-extrabold text-amber-600 mt-1">0</p>
-        </div>
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <p class="text-xs font-bold text-slate-500 uppercase">Última Pressão</p>
-          <p id="kpiLastBP" class="text-2xl font-extrabold text-slate-900 mt-1">--/--</p>
-        </div>
-        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <p class="text-xs font-bold text-slate-500 uppercase">Estoque Baixo</p>
-          <p id="kpiLowStock" class="text-3xl font-extrabold text-red-600 mt-1">0</p>
-        </div>
-      </div>
-
-      <!-- Gráfico de Pressão Arterial -->
-      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="text-lg font-extrabold text-slate-900">📈 Evolução da Pressão Arterial</h3>
-          <span id="bpStatusBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Normal</span>
-        </div>
-        <div class="relative h-72">
-          <canvas id="bpChart"></canvas>
-        </div>
-      </div>
-
-      <!-- Tabela de Medicações e Estoque -->
-      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h3 class="text-lg font-extrabold text-slate-900">💊 Controle de Medicações e Confirmações</h3>
-          <button id="btnResetDay" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg">
-            🔄 Simular Novo Dia
-          </button>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
-            <thead>
-              <tr class="border-b border-slate-200 text-slate-500">
-                <th class="py-2 pr-3">Remédio</th>
-                <th class="py-2 pr-3">Dosagem</th>
-                <th class="py-2 pr-3">Horário</th>
-                <th class="py-2 pr-3">Estoque</th>
-                <th class="py-2 pr-3">Status Hoje</th>
-                <th class="py-2">Ação</th>
-              </tr>
-            </thead>
-            <tbody id="caregiverMedTable" class="divide-y divide-slate-100"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Agenda de Consultas Médicas -->
-      <div class="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-        <h3 class="text-lg font-extrabold text-slate-900">📅 Consultas Médicas Agendadas</h3>
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
-          <input id="apptDoc" type="text" placeholder="Especialidade / Médico" class="px-3 py-2 rounded-xl border border-slate-300 text-sm" />
-          <input id="apptDate" type="date" class="px-3 py-2 rounded-xl border border-slate-300 text-sm" />
-          <input id="apptTime" type="time" class="px-3 py-2 rounded-xl border border-slate-300 text-sm" />
-          <button id="btnAddAppt" class="px-4 py-2 bg-teal-700 hover:bg-teal-800 text-white font-bold rounded-xl text-sm">+ Agendar</button>
-        </div>
-        <div id="apptList" class="space-y-2"></div>
-      </div>
-
-      <!-- Integração Google Sheets / Apps Script -->
-      <div class="bg-slate-900 text-white p-5 rounded-3xl space-y-3">
-        <h3 class="text-lg font-extrabold">🔗 Conexão com Planilha Google Sheets (Apps Script)</h3>
-        <p class="text-xs text-slate-300">Cole a URL do Web App publicado no Google Apps Script para sincronizar automaticamente cadastros, pressões e confirmações.</p>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input id="gasUrlInput" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400" />
-          <button id="btnSaveGasUrl" class="px-5 py-2.5 bg-teal-500 hover:bg-teal-600 text-slate-950 font-extrabold rounded-xl text-sm">Salvar URL</button>
-        </div>
-        <div class="flex flex-wrap gap-2 pt-1">
-          <button id="btnExportJson" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-bold rounded-xl border border-slate-700">⬇️ Exportar Backup JSON</button>
-          <span id="syncStatusText" class="text-xs text-teal-300 self-center">Modo local ativo (dados salvos no navegador)</span>
-        </div>
-      </div>
-
-    </section>
-
-
-    <!-- ==================== CONFIGURAÇÕES ==================== -->
-    <section id="viewConfig" class="hidden space-y-6">
-      <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 space-y-5">
-        <div>
-          <h2 class="text-2xl font-extrabold text-slate-900">⚙️ Configurações</h2>
-          <p class="text-sm text-slate-600">Personalize perfil sensorial, voz, instalação no celular e conexão com a planilha.</p>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-1">Nome da Pessoa</label>
-            <input id="cfgUserName" type="text" placeholder="Ex.: Maria" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm" />
-          </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-1">E-mail da Rede de Apoio</label>
-            <input id="cfgSupportEmail" type="email" placeholder="apoio@gmail.com" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm" />
+          <div id="voiceBox" class="hidden p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-800"></div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <button id="btnOpenAddMed" class="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold text-slate-800">+ Remédio</button>
+            <button id="btnOpenPostConsult" class="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold text-slate-800">🩺 Pós-Consulta</button>
+            <button id="btnReadToday" class="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold text-slate-800">🔊 Ler Agenda</button>
+            <button id="btnTestModal" class="py-2.5 px-2 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold text-slate-800">⏰ Testar Aviso</button>
           </div>
         </div>
 
-        <div class="grid md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-1">Perfil Sensorial</label>
-            <select id="cfgSensoryMode" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white">
-              <option value="soft">🌿 Modo Suave (Sem piscar — ideal TEA/Sensível)</option>
-              <option value="high">🔆 Alto Destaque (Alerta reforçado)</option>
-            </select>
+        <!-- Inserir Novo Remédio / Informação -->
+        <div id="quickAddCard" class="hidden bg-white rounded-2xl border border-teal-200 p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900">Inserir Medicação ou Rotina</h3>
+            <button id="btnCloseAddMed" class="text-xs text-slate-500">Fechar</button>
           </div>
-          <div>
-            <label class="block text-sm font-bold text-slate-700 mb-1">Velocidade da Voz</label>
-            <select id="cfgVoiceRate" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-sm bg-white">
-              <option value="0.95">Normal</option>
-              <option value="0.78">Mais devagar (fácil compreensão)</option>
-            </select>
+          <div class="grid sm:grid-cols-3 gap-2.5">
+            <input id="newMedName" type="text" placeholder="Nome (ex.: Losartana)" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <input id="newMedDose" type="text" placeholder="Dose (ex.: 50mg)" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <input id="newMedTime" type="time" value="08:00" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
           </div>
+          <button id="btnSaveMed" class="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl text-sm">Salvar na Agenda</button>
         </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-          <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
-            <input id="cfgAutoSpeak" type="checkbox" class="w-4 h-4 accent-teal-700" checked />
-            Ler lembretes e perguntas em voz alta automaticamente
-          </label>
-          <div class="flex flex-wrap gap-2">
-            <button id="btnInstallPwa" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition">
-              📲 Instalar no Celular
-            </button>
-            <button id="btnSaveConfig" class="px-5 py-2.5 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-sm font-extrabold transition">
-              Salvar Configurações
-            </button>
+        <!-- Agenda Completa de Hoje -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          <h3 class="text-base font-bold text-slate-900">Agenda de Hoje</h3>
+          <div id="medList" class="space-y-2.5"></div>
+        </div>
+
+        <!-- Inserir Pressão e Glicemia -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
+          <h3 class="text-base font-bold text-slate-900">Inserir Sinais Vitais (Pressão / Glicose)</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <input id="inSys" type="number" placeholder="Máxima (120)" class="px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold" />
+            <input id="inDia" type="number" placeholder="Mínima (80)" class="px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold" />
+            <input id="inGlucose" type="number" placeholder="Glicose mg/dL" class="px-3 py-2.5 rounded-xl border border-slate-300 text-sm font-semibold" />
+            <button id="btnSaveBP" class="bg-slate-900 hover:bg-slate-800 text-white font-semibold rounded-xl text-sm py-2.5">Registrar</button>
           </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
 
-  <script>
-    (function () {
-      const STORAGE_KEY = 'cuidafacil_saude_v1';
+      <!-- TAB 2: REDE DE APOIO -->
+      <section id="viewSupport" class="hidden space-y-5">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Adesão Hoje</p><p id="kpiAdh" class="text-2xl font-bold text-teal-700 mt-1">0%</p></div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Pendentes</p><p id="kpiPend" class="text-2xl font-bold text-amber-600 mt-1">0</p></div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Última Pressão</p><p id="kpiBP" class="text-2xl font-bold text-slate-900 mt-1">--/--</p></div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Último Check-in</p><p id="kpiCheckin" class="text-sm font-bold text-emerald-700 mt-2">Hoje</p></div>
+        </div>
 
-      const defaultState = {
-        elderName: 'Dona Maria',
-        caregiverEmail: '',
-        gasUrl: 'https://script.google.com/macros/s/AKfycbzBboHCuLaPbyI6BliNEpWalWmcTC_4KgyM3Ua44GZbe46EQrnBP50Yteep-UQtFPOTWA/exec',
-        medications: [
-          { id: 'm1', name: 'Losartana', dosage: '50mg (1 comp.)', time: '08:00', stock: 18, takenToday: false, takenAt: '' },
-          { id: 'm2', name: 'Metformina', dosage: '850mg (1 comp.)', time: '12:30', stock: 4, takenToday: false, takenAt: '' },
-          { id: 'm3', name: 'Sinvastatina', dosage: '20mg (1 comp.)', time: '21:00', stock: 22, takenToday: false, takenAt: '' }
-        ],
-        vitals: [
-          { id: 'v1', date: '11/11 08:15', sys: 125, dia: 80, status: 'Normal' },
-          { id: 'v2', date: '12/11 08:20', sys: 132, dia: 84, status: 'Atenção' },
-          { id: 'v3', date: '13/11 08:10', sys: 128, dia: 80, status: 'Normal' },
-          { id: 'v4', date: '14/11 08:05', sys: 142, dia: 92, status: 'Crítico' }
-        ],
-        appointments: [
-          { id: 'a1', doctor: 'Cardiologista - Dr. Carlos', date: '2026-11-22', time: '14:30' }
-        ]
-      };
+        <div class="bg-white p-5 rounded-2xl border border-slate-200">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-slate-900">Histórico de Pressão Arterial</h3>
+            <span id="bpBadge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">Normal</span>
+          </div>
+          <div class="relative h-64"><canvas id="bpChart"></canvas></div>
+        </div>
 
-      let state = loadState();
-      let wizardMode = 'med'; // 'med' | 'appt'
-      let wizardStep = 0;
-      let wizardDraft = {};
-      let activeUrgentMedId = null;
-      let bpChartInstance = null;
+        <!-- Gerador de Etiqueta QR Code para Colar na Caixa -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+          <h3 class="text-sm font-bold text-slate-900">Etiquetas QR Code para Caixa de Remédio</h3>
+          <p class="text-xs text-slate-600">Imprima e cole na caixa/porta-comprimidos quando a validação por QR Code estiver ligada.</p>
+          <div id="qrLabelsList" class="grid sm:grid-cols-2 gap-3"></div>
+        </div>
 
-      function loadState() {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (raw) return Object.assign({}, defaultState, JSON.parse(raw));
-        } catch (e) {}
-        return JSON.parse(JSON.stringify(defaultState));
-      }
+        <!-- Consultas -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
+          <h3 class="text-sm font-bold text-slate-900">Consultas &amp; Exames</h3>
+          <div class="grid sm:grid-cols-4 gap-2">
+            <input id="apptDoc" type="text" placeholder="Especialidade / Exame" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <input id="apptDate" type="date" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <input id="apptTime" type="time" class="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <button id="btnAddAppt" class="bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-lg text-sm py-2">Agendar</button>
+          </div>
+          <div id="apptList" class="space-y-2 text-sm"></div>
+        </div>
+      </section>
 
-      function saveState() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (e) {}
-      }
-
-      function showToast(msg) {
-        const el = document.getElementById('toast');
-        el.textContent = msg;
-        el.classList.remove('hidden');
-        setTimeout(() => el.classList.add('hidden'), 3500);
-      }
-
-      function speak(text) {
-        try {
-          if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance(text);
-            u.lang = 'pt-BR';
-            u.rate = 0.92;
-            window.speechSynthesis.speak(u);
-          }
-        } catch (e) {}
-      }
-
-      function playAlertBeep() {
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          [0, 0.25, 0.5].forEach((delay) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = 880;
-            gain.gain.setValueAtTime(0.25, ctx.currentTime + delay);
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.18);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(ctx.currentTime + delay);
-            osc.stop(ctx.currentTime + delay + 0.2);
-          });
-        } catch (e) {}
-      }
-
-      async function syncToSheets(action, payload) {
-        if (!state.gasUrl || !state.gasUrl.startsWith('https://')) return;
-        const statusEl = document.getElementById('syncStatusText');
-        try {
-          statusEl.textContent = 'Sincronizando com a planilha...';
-          await fetch(state.gasUrl, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, elderName: state.elderName, caregiverEmail: state.caregiverEmail, payload })
-          });
-          statusEl.textContent = 'Enviado para a planilha (' + new Date().toLocaleTimeString('pt-BR') + ')';
-        } catch (e) {
-          statusEl.textContent = 'Falha ao enviar para planilha (salvo localmente)';
-        }
-      }
-
-      // ---- Wizard Steps ----
-      const medSteps = [
-        { key: 'elderName', q: 'Qual é o seu nome?', hint: 'Para eu saber quem estou ajudando hoje.', placeholder: 'Ex.: Dona Maria' },
-        { key: 'caregiverEmail', q: 'Qual o e-mail de quem acompanha você (rede de apoio)?', hint: 'Para avisar se algum lembrete ficar sem confirmação.', placeholder: 'Ex.: filho@gmail.com' },
-        { key: 'name', q: 'Qual remédio você quer cadastrar?', hint: 'Diga ou digite o nome do medicamento.', placeholder: 'Ex.: Losartana' },
-        { key: 'dosage', q: 'Qual é a dosagem?', hint: 'Ex.: 1 comprimido, 50mg ou 10 gotas.', placeholder: 'Ex.: 50mg (1 comprimido)' },
-        { key: 'time', q: 'Que horas você deve tomar esse remédio?', hint: 'Informe no formato hora:minuto (ex.: 08:00).', placeholder: 'Ex.: 08:00' }
-      ];
-
-      const apptSteps = [
-        { key: 'doctor', q: 'Qual é o médico ou especialidade da consulta?', hint: 'Ex.: Cardiologista, Posto de Saúde.', placeholder: 'Ex.: Cardiologista Dr. Carlos' },
-        { key: 'date', q: 'Qual a data da consulta?', hint: 'Use AAAA-MM-DD (ex.: 2026-11-25).', placeholder: '2026-11-25' },
-        { key: 'time', q: 'Qual o horário da consulta?', hint: 'Ex.: 14:30.', placeholder: '14:30' }
-      ];
-
-      function renderWizard() {
-        const steps = wizardMode === 'med' ? medSteps : apptSteps;
-        const current = steps[wizardStep];
-        document.getElementById('wizardQuestion').textContent = current.q;
-        document.getElementById('wizardHint').textContent = current.hint;
-        const inp = document.getElementById('wizardInput');
-        inp.placeholder = current.placeholder;
-        inp.value = current.key === 'elderName' && state.elderName ? state.elderName : (current.key === 'caregiverEmail' && state.caregiverEmail ? state.caregiverEmail : '');
-        document.getElementById('wizardStepLabel').textContent = `Passo ${wizardStep + 1} de ${steps.length}`;
-      }
-
-      function handleWizardNext() {
-        const steps = wizardMode === 'med' ? medSteps : apptSteps;
-        const current = steps[wizardStep];
-        const val = document.getElementById('wizardInput').value.trim();
-        if (!val && current.key !== 'caregiverEmail') {
-          showToast('Por favor, preencha essa resposta antes de continuar.');
-          speak('Por favor, me diga a resposta para continuar.');
-          return;
-        }
-        wizardDraft[current.key] = val;
-        if (current.key === 'elderName') state.elderName = val;
-        if (current.key === 'caregiverEmail') state.caregiverEmail = val;
-
-        if (wizardStep < steps.length - 1) {
-          wizardStep++;
-          renderWizard();
-          speak(steps[wizardStep].q);
-        } else {
-          if (wizardMode === 'med') {
-            const newMed = {
-              id: 'm' + Date.now(),
-              name: wizardDraft.name,
-              dosage: wizardDraft.dosage,
-              time: /^\d{1,2}:\d{2}$/.test(wizardDraft.time) ? wizardDraft.time.padStart(5, '0') : '08:00',
-              stock: 30,
-              takenToday: false,
-              takenAt: ''
-            };
-            state.medications.push(newMed);
-            saveState();
-            syncToSheets('add_medication', newMed);
-            showToast(`Remédio ${newMed.name} cadastrado para ${newMed.time}!`);
-            speak(`Pronto! Cadastrei ${newMed.name}, ${newMed.dosage}, às ${newMed.time}.`);
-          } else {
-            const newAppt = {
-              id: 'a' + Date.now(),
-              doctor: wizardDraft.doctor,
-              date: wizardDraft.date,
-              time: wizardDraft.time
-            };
-            state.appointments.push(newAppt);
-            saveState();
-            syncToSheets('add_appointment', newAppt);
-            showToast(`Consulta agendada: ${newAppt.doctor}`);
-            speak(`Consulta com ${newAppt.doctor} agendada para ${newAppt.date} às ${newAppt.time}.`);
-            wizardMode = 'med';
-          }
-          wizardStep = 2;
-          wizardDraft = {};
-          renderAll();
-        }
-      }
-
-      // ---- Confirmar Dose ----
-      function confirmMedication(id) {
-        const med = state.medications.find((m) => m.id === id);
-        if (!med) return;
-        med.takenToday = true;
-        med.takenAt = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        if (med.stock > 0) med.stock -= 1;
-        saveState();
-        syncToSheets('confirm_dose', med);
-        document.getElementById('urgentModal').classList.add('hidden');
-        showToast(`Ótimo! ${med.name} confirmado às ${med.takenAt}.`);
-        speak(`Muito bem! Registrei que você tomou ${med.name}.`);
-        renderAll();
-      }
-
-      function triggerUrgentAlert(med) {
-        const target = med || state.medications.find((m) => !m.takenToday) || state.medications[0];
-        if (!target) {
-          showToast('Cadastre ao menos um remédio para testar o alerta.');
-          return;
-        }
-        activeUrgentMedId = target.id;
-        document.getElementById('urgentMedName').textContent = `${target.name} ${target.dosage}`;
-        document.getElementById('urgentMedInfo').textContent = `Horário programado: ${target.time}`;
-        document.getElementById('urgentModal').classList.remove('hidden');
-        playAlertBeep();
-        speak(`Atenção ${state.elderName}! Hora de tomar ${target.name}, ${target.dosage}.`);
-      }
-
-      // ---- Sinais Vitais (Pressão) ----
-      function classifyBP(sys, dia) {
-        if (sys >= 140 || dia >= 90) return 'Crítico';
-        if (sys >= 130 || dia >= 85) return 'Atenção';
-        return 'Normal';
-      }
-
-      function saveVitals(rawSys, rawDia, origem) {
-        let sys = parseInt(rawSys, 10);
-        let dia = parseInt(rawDia, 10);
-        if (isNaN(sys) || isNaN(dia)) {
-          showToast('Informe os dois números da pressão (ex.: 120 e 80).');
-          return;
-        }
-        if (sys < 30) sys *= 10;
-        if (dia < 20) dia *= 10;
-        const status = classifyBP(sys, dia);
-        const entry = {
-          id: 'v' + Date.now(),
-          date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          sys,
-          dia,
-          status,
-          origem: origem || 'WebApp'
-        };
-        state.vitals.push(entry);
-        saveState();
-        syncToSheets('add_vitals', entry);
-        document.getElementById('inputSys').value = '';
-        document.getElementById('inputDia').value = '';
-        showToast(`Pressão ${sys}x${dia} salva (${status}).`);
-        speak(`Registrei sua pressão em ${sys} por ${dia}. Classificação: ${status}.`);
-        renderAll();
-      }
-
-      // ---- Interpretador de Comandos de Voz ----
-      function processVoiceCommand(text) {
-        const box = document.getElementById('voiceTranscriptBox');
-        const out = document.getElementById('voiceTranscriptText');
-        box.classList.remove('hidden');
-        const lower = text.toLowerCase();
-
-        const bpMatch = lower.match(/(\d{2,3})\s*(?:por|x|\/|e)\s*(\d{1,3})/);
-        if (lower.includes('pressão') || lower.includes('pressao') || bpMatch) {
-          if (bpMatch) {
-            saveVitals(bpMatch[1], bpMatch[2], 'Voz');
-            out.textContent = `"${text}" → Pressão ${bpMatch[1]}x${bpMatch[2]} registrada!`;
-            return;
-          }
-        }
-
-        if (lower.includes('lembrar') || lower.includes('remédio') && !lower.includes('novo') && !lower.includes('inserir')) {
-          const pending = state.medications.filter((m) => !m.takenToday);
-          const msg = pending.length
-            ? `Você tem ${pending.length} remédio(s) hoje: ` + pending.map((m) => `${m.name} às ${m.time}`).join(', ')
-            : 'Parabéns! Você já tomou todos os remédios de hoje.';
-          out.textContent = `"${text}" → ${msg}`;
-          speak(msg);
-          return;
-        }
-
-        if (lower.includes('novo') || lower.includes('inserir') && lower.includes('remédio')) {
-          wizardMode = 'med';
-          wizardStep = 2;
-          renderWizard();
-          out.textContent = `"${text}" → Vamos cadastrar um novo remédio! Qual é o nome dele?`;
-          speak('Certo! Qual é o nome do novo remédio?');
-          document.getElementById('wizardInput').focus();
-          return;
-        }
-
-        if (lower.includes('consulta') || lower.includes('médico') && lower.includes('agendar')) {
-          wizardMode = 'appt';
-          wizardStep = 0;
-          renderWizard();
-          out.textContent = `"${text}" → Vamos agendar sua consulta! Qual o médico ou especialidade?`;
-          speak('Certo! Qual é o médico ou especialidade da consulta?');
-          document.getElementById('wizardInput').focus();
-          return;
-        }
-
-        if (lower.includes('tomei')) {
-          const next = state.medications.find((m) => !m.takenToday);
-          if (next) {
-            confirmMedication(next.id);
-            out.textContent = `"${text}" → Confirmado: ${next.name}!`;
-          } else {
-            out.textContent = `"${text}" → Todos os remédios de hoje já foram confirmados.`;
-          }
-          return;
-        }
-
-        out.textContent = `"${text}" → Diga por exemplo: "Me ajude a lembrar o remédio", "Minha pressão ficou 12 por 8", "Inserir novo remédio" ou "Inserir consulta".`;
-        speak('Não entendi bem. Você pode dizer: me ajude a lembrar o remédio, ou minha pressão ficou 12 por 8.');
-      }
-
-      function startVoiceRecognition() {
-        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) {
-          showToast('Microfone não suportado neste navegador. Use os botões rápidos abaixo.');
-          return;
-        }
-        const btn = document.getElementById('btnVoiceSkill');
-        const lbl = document.getElementById('voiceBtnLabel');
-        const rec = new SpeechRec();
-        rec.lang = 'pt-BR';
-        rec.interimResults = false;
-        btn.classList.add('mic-listening');
-        lbl.textContent = 'OUVINDO... PODE FALAR AGORA';
-        rec.onresult = (e) => {
-          const transcript = e.results[0][0].transcript;
-          processVoiceCommand(transcript);
-        };
-        rec.onerror = () => showToast('Não consegui ouvir. Tente novamente ou use os botões.');
-        rec.onend = () => {
-          btn.classList.remove('mic-listening');
-          lbl.textContent = 'FALAR COM O AGENTE ("Me ajude a lembrar")';
-        };
-        rec.start();
-      }
-
-      // ---- Renderização ----
-      function renderAll() {
-        document.getElementById('greetingTitle').textContent = `Olá, ${state.elderName || 'amigo(a)'}! Como posso ajudar?`;
-        document.getElementById('gasUrlInput').value = state.gasUrl || '';
-
-        const listEl = document.getElementById('elderMedList');
-        listEl.innerHTML = '';
-        const sorted = [...state.medications].sort((a, b) => a.time.localeCompare(b.time));
-        let takenCount = 0;
-
-        sorted.forEach((med) => {
-          if (med.takenToday) takenCount++;
-          const card = document.createElement('div');
-          card.className = `p-4 rounded-2xl border-2 flex flex-wrap items-center justify-between gap-3 ${
-            med.takenToday ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200'
-          }`;
-          card.innerHTML = `
+      <!-- TAB 3: CONFIGURAÇÕES -->
+      <section id="viewConfig" class="hidden space-y-5">
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
+          <h2 class="text-base font-bold text-slate-900">Configurações, Acessibilidade e Antifraude</h2>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Nome da Pessoa</label><input id="cfgName" type="text" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Telefone do Apoio (Emergência)</label><input id="cfgPhone" type="tel" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">E-mail da Rede de Apoio</label><input id="cfgEmail" type="email" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
+            <div><label class="block text-xs font-semibold text-slate-600 mb-1">Alergias / Condições (Cartão)</label><input id="cfgAllergies" type="text" placeholder="Ex.: Dipirona, Diabetes" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
             <div>
-              <div class="flex items-center gap-2">
-                <span class="text-2xl font-extrabold text-teal-800">${med.time}</span>
-                <span class="text-xl font-extrabold text-slate-900">${med.name}</span>
-              </div>
-              <p class="text-base text-slate-600 font-semibold">${med.dosage} • Estoque: ${med.stock} un.</p>
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Perfil Visual / Sensorial</label>
+              <select id="cfgMode" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white">
+                <option value="soft">Modo Suave (sem piscar — TEA/Sensível)</option>
+                <option value="high">Alto Destaque</option>
+                <option value="lowvision">Baixa Visão (Letra GG + Voz)</option>
+              </select>
             </div>
             <div>
-              ${
-                med.takenToday
-                  ? `<span class="inline-block px-4 py-2.5 bg-emerald-600 text-white font-extrabold rounded-xl text-base">✓ Tomado às ${med.takenAt}</span>`
-                  : `<button data-take="${med.id}" class="btn-take px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl text-lg shadow transition">TOMEI ✓</button>`
-              }
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Velocidade da Voz</label>
+              <select id="cfgRate" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm bg-white">
+                <option value="0.95">Normal</option>
+                <option value="0.78">Mais devagar</option>
+              </select>
             </div>
-          `;
-          listEl.appendChild(card);
-        });
+          </div>
 
-        document.getElementById('todayProgressBadge').textContent = `${takenCount}/${sorted.length} tomados`;
+          <!-- Chaves Ligáveis: QR Code, Foto, Voz Contínua -->
+          <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-sm">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Controles de Confirmação e Voz</p>
+            <label class="flex items-center gap-2"><input id="cfgReqQr" type="checkbox" class="w-4 h-4 accent-teal-700" /> Exigir leitura de <strong>QR Code da caixa</strong> para confirmar remédio</label>
+            <label class="flex items-center gap-2"><input id="cfgReqPhoto" type="checkbox" class="w-4 h-4 accent-teal-700" /> Exigir <strong>foto rápida da dose</strong> para confirmar remédio</label>
+            <label class="flex items-center gap-2"><input id="cfgContVoice" type="checkbox" class="w-4 h-4 accent-teal-700" /> <strong>Voz Contínua</strong> (ler pergunta e abrir microfone automático)</label>
+          </div>
 
-        const pct = sorted.length ? Math.round((takenCount / sorted.length) * 100) : 0;
-        document.getElementById('kpiAdherence').textContent = `${pct}%`;
-        document.getElementById('kpiPending').textContent = `${sorted.length - takenCount}`;
-        const lastV = state.vitals[state.vitals.length - 1];
-        document.getElementById('kpiLastBP').textContent = lastV ? `${lastV.sys}/${lastV.dia}` : '--/--';
-        const badge = document.getElementById('bpStatusBadge');
-        if (lastV) {
-          badge.textContent = lastV.status;
-          badge.className = `px-3 py-1 rounded-full text-xs font-bold ${
-            lastV.status === 'Crítico' ? 'bg-red-100 text-red-800' : lastV.status === 'Atenção' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-          }`;
-        }
-        document.getElementById('kpiLowStock').textContent = `${sorted.filter((m) => m.stock <= 5).length}`;
+          <div class="pt-2 border-t border-slate-100 space-y-2">
+            <label class="block text-xs font-semibold text-slate-600">Google OAuth Client ID (opcional para Login Gmail)</label>
+            <input id="cfgGoogleClientId" type="text" placeholder="123456-xxxx.apps.googleusercontent.com" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-mono" />
+            <label class="block text-xs font-semibold text-slate-600">URL do Google Apps Script (/exec)</label>
+            <input id="cfgGasUrl" type="url" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs font-mono" />
+          </div>
 
-        const tbody = document.getElementById('caregiverMedTable');
-        tbody.innerHTML = '';
-        sorted.forEach((med) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="py-2.5 pr-3 font-bold text-slate-900">${med.name}</td>
-            <td class="py-2.5 pr-3 text-slate-600">${med.dosage}</td>
-            <td class="py-2.5 pr-3 font-bold">${med.time}</td>
-            <td class="py-2.5 pr-3 ${med.stock <= 5 ? 'text-red-600 font-extrabold' : 'text-slate-700'}">${med.stock} un.</td>
-            <td class="py-2.5 pr-3">${med.takenToday ? '<span class="text-emerald-700 font-bold">✓ Tomado (' + med.takenAt + ')</span>' : '<span class="text-amber-600 font-bold">⏳ Pendente</span>'}</td>
-            <td class="py-2.5"><button data-del-med="${med.id}" class="text-xs text-red-600 hover:underline font-bold">Remover</button></td>
-          `;
-          tbody.appendChild(tr);
-        });
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+            <div class="flex gap-2">
+              <button id="btnInstall" class="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold">Instalar no Celular</button>
+              <button id="btnResetSetup" class="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium">Tela Inicial</button>
+            </div>
+            <button id="btnSaveCfg" class="px-5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold">Salvar</button>
+          </div>
+          <p id="syncStatus" class="text-xs text-slate-500">Conectado ao Apps Script</p>
+        </div>
+      </section>
 
-        const apptEl = document.getElementById('apptList');
-        apptEl.innerHTML = '';
-        state.appointments.forEach((a) => {
-          const row = document.createElement('div');
-          row.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm';
-          row.innerHTML = `
-            <div><strong class="text-slate-900">${a.doctor}</strong> • ${a.date} às ${a.time}</div>
-            <button data-del-appt="${a.id}" class="text-red-600 font-bold text-xs hover:underline">Excluir</button>
-          `;
-          apptEl.appendChild(row);
-        });
+    </main>
+  </div>
 
-        renderChart();
-      }
-
-      function renderChart() {
-        const ctx = document.getElementById('bpChart').getContext('2d');
-        if (bpChartInstance) bpChartInstance.destroy();
-        bpChartInstance = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: state.vitals.map((v) => v.date),
-            datasets: [
-              { label: 'Sistólica (Máxima)', data: state.vitals.map((v) => v.sys), borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.1)', tension: 0.3, fill: true },
-              { label: 'Diastólica (Mínima)', data: state.vitals.map((v) => v.dia), borderColor: '#0f766e', backgroundColor: 'rgba(15,118,110,0.1)', tension: 0.3, fill: true }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { min: 50, max: 190 } }
-          }
-        });
-      }
-
-      // ---- Event Listeners ----
-      document.getElementById('btnWizardNext').addEventListener('click', handleWizardNext);
-      document.getElementById('btnWizardReset').addEventListener('click', () => {
-        wizardMode = 'med';
-        wizardStep = 0;
-        wizardDraft = {};
-        renderWizard();
-      });
-      document.getElementById('btnSpeakQuestion').addEventListener('click', () => {
-        speak(document.getElementById('wizardQuestion').textContent);
-      });
-
-      document.getElementById('btnVoiceSkill').addEventListener('click', startVoiceRecognition);
-      document.querySelectorAll('.quick-cmd').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const cmd = btn.getAttribute('data-cmd');
-          if (cmd === 'lembrar') processVoiceCommand('me ajude a lembrar o remédio');
-          if (cmd === 'novo_remedio') processVoiceCommand('inserir novo remédio');
-          if (cmd === 'pressao') {
-            document.getElementById('vitalsCard').scrollIntoView({ behavior: 'smooth' });
-            document.getElementById('inputSys').focus();
-          }
-          if (cmd === 'consulta') processVoiceCommand('inserir consulta');
-        });
-      });
-
-      document.getElementById('btnTestAlert').addEventListener('click', () => triggerUrgentAlert());
-      document.getElementById('btnUrgentConfirm').addEventListener('click', () => confirmMedication(activeUrgentMedId));
-      document.getElementById('btnUrgentSnooze').addEventListener('click', () => {
-        document.getElementById('urgentModal').classList.add('hidden');
-        showToast('Alerta adiado por 10 minutos.');
-      });
-
-      document.getElementById('btnSaveVitals').addEventListener('click', () => {
-        saveVitals(document.getElementById('inputSys').value, document.getElementById('inputDia').value, 'WebApp');
-      });
-
-      document.getElementById('elderMedList').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-take]');
-        if (btn) confirmMedication(btn.getAttribute('data-take'));
-      });
-
-      document.getElementById('caregiverMedTable').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-del-med]');
-        if (btn) {
-          const id = btn.getAttribute('data-del-med');
-          state.medications = state.medications.filter((m) => m.id !== id);
-          saveState();
-          renderAll();
-        }
-      });
-
-      document.getElementById('btnAddAppt').addEventListener('click', () => {
-        const doctor = document.getElementById('apptDoc').value.trim();
-        const date = document.getElementById('apptDate').value;
-        const time = document.getElementById('apptTime').value;
-        if (!doctor || !date || !time) {
-          showToast('Preencha médico, data e horário da consulta.');
-          return;
-        }
-        const appt = { id: 'a' + Date.now(), doctor, date, time };
-        state.appointments.push(appt);
-        saveState();
-        syncToSheets('add_appointment', appt);
-        document.getElementById('apptDoc').value = '';
-        renderAll();
-        showToast('Consulta adicionada!');
-      });
-
-      document.getElementById('apptList').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-del-appt]');
-        if (btn) {
-          const id = btn.getAttribute('data-del-appt');
-          state.appointments = state.appointments.filter((a) => a.id !== id);
-          saveState();
-          renderAll();
-        }
-      });
-
-      document.getElementById('btnResetDay').addEventListener('click', () => {
-        state.medications.forEach((m) => { m.takenToday = false; m.takenAt = ''; });
-        saveState();
-        renderAll();
-        showToast('Status diário reiniciado para testes.');
-      });
-
-      document.getElementById('btnSaveGasUrl').addEventListener('click', () => {
-        state.gasUrl = document.getElementById('gasUrlInput').value.trim();
-        saveState();
-        showToast('URL do Apps Script salva!');
-      });
-
-      document.getElementById('btnExportJson').addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'meu-cuidado-backup.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-
-      setInterval(() => {
-        const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const due = state.medications.find((m) => !m.takenToday && m.time === now);
-        if (due && document.getElementById('urgentModal').classList.contains('hidden')) {
-          triggerUrgentAlert(due);
-        }
-      }, 30000);
-
-      // ---- Tela de Entrada, Configurações e Perfil Sensorial ----
-      let deferredPrompt = null;
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-      });
-
-      function applySensoryMode() {
-        const mode = state.sensoryMode || 'soft';
-        const modalBox = document.querySelector('#urgentModal > div');
-        if (!modalBox) return;
-        if (mode === 'soft') {
-          modalBox.classList.remove('urgent-alert-pulse', 'border-red-600');
-          modalBox.classList.add('border-teal-600');
-        } else {
-          modalBox.classList.add('urgent-alert-pulse', 'border-red-600');
-          modalBox.classList.remove('border-teal-600');
-        }
-      }
-
-      function switchTab(target) {
-        ['viewPessoa', 'viewCuidador', 'viewConfig'].forEach(id => {
-          document.getElementById(id).classList.toggle('hidden', id !== target);
-        });
-        const map = { viewPessoa: 'tabPessoa', viewCuidador: 'tabCuidador', viewConfig: 'tabConfig' };
-        Object.entries(map).forEach(([vId, tId]) => {
-          const el = document.getElementById(tId);
-          el.className = (vId === target)
-            ? 'px-4 py-2 rounded-lg text-sm font-bold bg-white text-teal-900 shadow transition'
-            : 'px-4 py-2 rounded-lg text-sm font-bold text-teal-100 hover:bg-teal-700 transition';
-        });
-        if (target === 'viewCuidador') renderChart();
-        if (target === 'viewConfig') {
-          document.getElementById('cfgUserName').value = state.elderName || '';
-          document.getElementById('cfgSupportEmail').value = state.caregiverEmail || '';
-          document.getElementById('cfgSensoryMode').value = state.sensoryMode || 'soft';
-          document.getElementById('cfgVoiceRate').value = String(state.voiceRate || 0.95);
-          document.getElementById('cfgAutoSpeak').checked = state.autoSpeak !== false;
-        }
-      }
-
-      document.getElementById('tabPessoa').addEventListener('click', () => switchTab('viewPessoa'));
-      document.getElementById('tabCuidador').addEventListener('click', () => switchTab('viewCuidador'));
-      document.getElementById('tabConfig').addEventListener('click', () => switchTab('viewConfig'));
-      document.getElementById('brandHome').addEventListener('click', () => {
-        document.getElementById('welcomeScreen').classList.remove('hidden');
-      });
-
-      const wSoft = document.getElementById('welcomeSensorySoft');
-      const wHigh = document.getElementById('welcomeSensoryHigh');
-      function setWelcomeSensory(mode) {
-        state.sensoryMode = mode;
-        saveState();
-        applySensoryMode();
-        wSoft.className = mode === 'soft'
-          ? 'py-2.5 px-3 rounded-xl border-2 border-teal-600 bg-teal-50 text-teal-900 text-sm font-bold transition'
-          : 'py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-bold transition';
-        wHigh.className = mode === 'high'
-          ? 'py-2.5 px-3 rounded-xl border-2 border-red-600 bg-red-50 text-red-900 text-sm font-bold transition'
-          : 'py-2.5 px-3 rounded-xl border border-slate-300 bg-white text-slate-700 text-sm font-bold transition';
-      }
-      wSoft.addEventListener('click', () => setWelcomeSensory('soft'));
-      wHigh.addEventListener('click', () => setWelcomeSensory('high'));
-
-      function closeWelcomeAndGo(tabId, startVoice) {
-        localStorage.setItem('meu_cuidado_entered', '1');
-        document.getElementById('welcomeScreen').classList.add('hidden');
-        switchTab(tabId);
-        if (startVoice) {
-          speak('Olá! Estou pronto para ajudar com seus remédios e rotinas.');
-          setTimeout(() => { try { startVoiceRecognition(); } catch(e) {} }, 1200);
-        }
-      }
-      document.getElementById('btnEnterVoice').addEventListener('click', () => closeWelcomeAndGo('viewPessoa', true));
-      document.getElementById('btnEnterTouch').addEventListener('click', () => closeWelcomeAndGo('viewPessoa', false));
-      document.getElementById('btnEnterSupport').addEventListener('click', () => closeWelcomeAndGo('viewCuidador', false));
-      document.getElementById('btnEnterConfig').addEventListener('click', () => closeWelcomeAndGo('viewConfig', false));
-
-      if (localStorage.getItem('meu_cuidado_entered') === '1') {
-        document.getElementById('welcomeScreen').classList.add('hidden');
-      }
-
-      document.getElementById('btnWaterCheckin').addEventListener('click', () => {
-        state.waterCount = (state.waterCount || 0) + 1;
-        document.getElementById('waterCount').textContent = state.waterCount;
-        saveState();
-        showToast('💧 Hidratação registrada!');
-      });
-      document.getElementById('waterCount').textContent = state.waterCount || 0;
-
-      const origRenderAll = renderAll;
-      renderAll = function() {
-        origRenderAll();
-        const total = state.medications.length || 1;
-        const done = state.medications.filter(m => m.takenToday).length;
-        const pct = Math.round((done / total) * 100);
-        document.getElementById('dailyProgressBar').style.width = pct + '%';
-        document.getElementById('dailyProgressLabel').textContent = `${done}/${state.medications.length} (${pct}%)`;
-      };
-
-      document.getElementById('btnSaveConfig').addEventListener('click', () => {
-        const n = document.getElementById('cfgUserName').value.trim();
-        const em = document.getElementById('cfgSupportEmail').value.trim();
-        if (n) state.elderName = n;
-        if (em) state.caregiverEmail = em;
-        state.sensoryMode = document.getElementById('cfgSensoryMode').value;
-        state.voiceRate = parseFloat(document.getElementById('cfgVoiceRate').value) || 0.95;
-        state.autoSpeak = document.getElementById('cfgAutoSpeak').checked;
-        saveState();
-        applySensoryMode();
-        renderAll();
-        showToast('Configurações salvas!');
-      });
-
-      document.getElementById('btnInstallPwa').addEventListener('click', async () => {
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          await deferredPrompt.userChoice;
-          deferredPrompt = null;
-        } else {
-          showToast('No Chrome: toque em ⋮ > Instalar app. No iPhone: Compartilhar > Tela de Início.');
-        }
-      });
-
-      applySensoryMode();
-      renderWizard();
-      renderAll();
-    })();
-  </script>
+  <script src="app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(() => {});
-      });
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
     }
   </script>
 </body>
