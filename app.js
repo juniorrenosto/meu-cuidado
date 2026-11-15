@@ -19,13 +19,8 @@
     gasUrl: DEFAULT_GAS,
     waterCount: 0,
     lastCheckin: '',
-    medications: [
-      { id: 'm1', name: 'Losartana', dosage: '50mg (1 comp.)', time: '08:00', stock: 18, takenToday: false, takenAt: '' },
-      { id: 'm2', name: 'Metformina', dosage: '850mg (1 comp.)', time: '12:30', stock: 12, takenToday: false, takenAt: '' }
-    ],
-    vitals: [
-      { id: 'v1', date: '14/11 08:00', sys: 120, dia: 80, glucose: '', status: 'Normal' }
-    ],
+    medications: [],
+    vitals: [],
     appointments: []
   };
 
@@ -83,6 +78,7 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({
           action,
+          userEmail: state.userEmail || '',
           userName: state.userName || 'Usuário',
           elderName: state.userName || 'Usuário',
           caregiverEmail: state.supportEmail,
@@ -211,7 +207,7 @@
       nowC.innerHTML = `<p class="text-teal-800 font-bold">${next.time} — Tomar ${next.name} (${next.dosage})</p><p class="text-xs text-slate-500 mt-1">Passo a passo: 1. Pegue 1 copo de água • 2. Tome a dose • 3. Confirme abaixo.</p>`;
       nowA.innerHTML = `<button data-open-confirm="${next.id}" class="lv-btn flex-1 py-3 px-4 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl text-sm">Iniciar Confirmação</button>`;
     } else {
-      nowC.innerHTML = `<p class="text-emerald-700 font-bold">Tudo confirmado por enquanto hoje.</p>`;
+      nowC.innerHTML = `<p class="text-slate-600 font-medium">${sorted.length ? 'Tudo confirmado por enquanto hoje.' : 'Nenhum remédio cadastrado ainda. Toque em + Remédio ou use a voz.'}</p>`;
       nowA.innerHTML = '';
     }
 
