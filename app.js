@@ -91,6 +91,22 @@
     }
   }
 
+    async function loadFromSheets(email) {
+    if (!email || !state.gasUrl) return;
+    try {
+      const resp = await fetch(`${state.gasUrl}?action=load&email=${encodeURIComponent(email)}`, { redirect: "follow" });
+      const data = await resp.json();
+      if (data && data.ok) {
+        if (Array.isArray(data.medications) && data.medications.length) state.medications = data.medications;
+        if (Array.isArray(data.vitals) && data.vitals.length) state.vitals = data.vitals;
+        if (Array.isArray(data.appointments) && data.appointments.length) state.appointments = data.appointments;
+        saveState();
+        renderAll();
+        toast("Dados sincronizados da planilha!");
+      }
+    } catch (e) {}
+  }
+
   // ---- Google Sign-In ----
   function decodeJwt(token) {
     const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -114,7 +130,8 @@
           document.getElementById('googleAvatar').src = state.userAvatar;
           document.getElementById('googleUserBadge').classList.remove('hidden');
           saveState();
-          toast('Conta Google conectada!');
+          toast('Conta Google conectada! Buscando dados...');
+          loadFromSheets(state.userEmail);
         }
       });
       google.accounts.id.renderButton(document.getElementById('googleBtnContainer'), { theme: 'outline', size: 'large', width: 300 });
@@ -599,6 +616,7 @@
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
     renderAll();
+    if (state.userEmail) loadFromSheets(state.userEmail);
   } else {
     showSetup();
   }
