@@ -97,6 +97,12 @@
       const resp = await fetch(`${state.gasUrl}?action=load&email=${encodeURIComponent(email)}`, { redirect: "follow" });
       const data = await resp.json();
       if (data && data.ok) {
+        if (data.profile) {
+          Object.assign(state, data.profile);
+          if (document.getElementById('setupName')) document.getElementById('setupName').value = state.userName || '';
+          if (document.getElementById('setupSupportPhone')) document.getElementById('setupSupportPhone').value = state.supportPhone || '';
+          if (document.getElementById('setupSupportEmail')) document.getElementById('setupSupportEmail').value = state.supportEmail || '';
+        }
         if (Array.isArray(data.medications) && data.medications.length) state.medications = data.medications;
         if (Array.isArray(data.vitals) && data.vitals.length) state.vitals = data.vitals;
         if (Array.isArray(data.appointments) && data.appointments.length) state.appointments = data.appointments;
@@ -158,6 +164,13 @@
     if (!state.userName) { toast('Informe seu nome para começar.'); return; }
     state.configured = true;
     saveState();
+    if (state.userEmail) {
+      sync('save_profile', {
+        userName: state.userName, supportPhone: state.supportPhone, supportEmail: state.supportEmail,
+        allergies: state.allergies, sensoryMode: state.sensoryMode, voiceRate: state.voiceRate,
+        requireQr: state.requireQr, requirePhoto: state.requirePhoto, continuousVoice: state.continuousVoice
+      });
+    }
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
     renderAll();
@@ -602,8 +615,13 @@
     state.requirePhoto = document.getElementById('cfgReqPhoto').checked;
     state.continuousVoice = document.getElementById('cfgContVoice').checked;
         saveState();
+    sync('save_profile', {
+      userName: state.userName, supportPhone: state.supportPhone, supportEmail: state.supportEmail,
+      allergies: state.allergies, sensoryMode: state.sensoryMode, voiceRate: state.voiceRate,
+      requireQr: state.requireQr, requirePhoto: state.requirePhoto, continuousVoice: state.continuousVoice
+    });
     renderAll();
-    toast('Configurações salvas!');
+    toast('Configurações salvas e sincronizadas!');
   });
 
   document.getElementById('btnResetSetup').addEventListener('click', showSetup);
