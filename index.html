@@ -504,7 +504,405 @@
 
         if (wizardStep < steps.length - 1) {
           wizardStep++;
-          
+          renderWizard();
+          speak(steps[wizardStep].q);
+        } else {
+          if (wizardMode === 'med') {
+            const newMed = {
+              id: 'm' + Date.now(),
+              name: wizardDraft.name,
+              dosage: wizardDraft.dosage,
+              time: /^\d{1,2}:\d{2}$/.test(wizardDraft.time) ? wizardDraft.time.padStart(5, '0') : '08:00',
+              stock: 30,
+              takenToday: false,
+              takenAt: ''
+            };
+            state.medications.push(newMed);
+            saveState();
+            syncToSheets('add_medication', newMed);
+            showToast(`Remédio ${newMed.name} cadastrado para ${newMed.time}!`);
+            speak(`Pronto! Cadastrei ${newMed.name}, ${newMed.dosage}, às ${newMed.time}.`);
+          } else {
+            const newAppt = {
+              id: 'a' + Date.now(),
+              doctor: wizardDraft.doctor,
+              date: wizardDraft.date,
+              time: wizardDraft.time
+            };
+            state.appointments.push(newAppt);
+            saveState();
+            syncToSheets('add_appointment', newAppt);
+            showToast(`Consulta agendada: ${newAppt.doctor}`);
+            speak(`Consulta com ${newAppt.doctor} agendada para ${newAppt.date} às ${newAppt.time}.`);
+            wizardMode = 'med';
+          }
+          wizardStep = 2;
+          wizardDraft = {};
+          renderAll();
+        }
+      }
+
+      // ---- Confirmar Dose ----
+      function confirmMedication(id) {
+        const med = state.medications.find((m) => m.id === id);
+        if (!med) return;
+        med.takenToday = true;
+        med.takenAt = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        if (med.stock > 0) med.stock -= 1;
+        saveState();
+        syncToSheets('confirm_dose', med);
+        document.getElementById('urgentModal').classList.add('hidden');
+        showToast(`Ótimo! ${med.name} confirmado às ${med.takenAt}.`);
+        speak(`Muito bem! Registrei que você tomou ${med.name}.`);
+        renderAll();
+      }
+
+      function triggerUrgentAlert(med) {
+        const target = med || state.medications.find((m) => !m.takenToday) || state.medications[0];
+        if (!target) {
+          showToast('Cadastre ao menos um remédio para testar o alerta.');
+          return;
+        }
+        activeUrgentMedId = target.id;
+        document.getElementById('urgentMedName').textContent = `${target.name} ${target.dosage}`;
+        document.getElementById('urgentMedInfo').textContent = `Horário programado: ${target.time}`;
+        document.getElementById('urgentModal').classList.remove('hidden');
+        playAlertBeep();
+        speak(`Atenção ${state.elderName}! Hora de tomar ${target.name}, ${target.dosage}.`);
+      }
+
+      // ---- Sinais Vitais (Pressão) ----
+      function classifyBP(sys, dia) {
+        if (sys >= 140 || dia >= 90) return 'Crítico';
+        if (sys >= 130 || dia >= 85) return 'Atenção';
+        return 'Normal';
+      }
+
+      function saveVitals(rawSys, rawDia, origem) {
+        let sys = parseInt(rawSys, 10);
+        let dia = parseInt(rawDia, 10);
+        if (isNaN(sys) || isNaN(dia)) {
+          showToast('Informe os dois números da pressão (ex.: 120 e 80).');
+          return;
+        }
+        if (sys < 30) sys *= 10;
+        if (dia < 20) dia *= 10;
+        const status = classifyBP(sys, dia);
+        const entry = {
+          id: 'v' + Date.now(),
+          date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          sys,
+          dia,
+          status,
+          origem: origem || 'WebApp'
+        };
+        state.vitals.push(entry);
+        saveState();
+        syncToSheets('add_vitals', entry);
+        document.getElementById('inputSys').value = '';
+        document.getElementById('inputDia').value = '';
+        showToast(`Pressão ${sys}x${dia} salva (${status}).`);
+        speak(`Registrei sua pressão em ${sys} por ${dia}. Classificação: ${status}.`);
+        renderAll();
+      }
+
+      // ---- Interpretador de Comandos de Voz ----
+      function processVoiceCommand(text) {
+        const box = document.getElementById('voiceTranscriptBox');
+        const out = document.getElementById('voiceTranscriptText');
+        box.classList.remove('hidden');
+        const lower = text.toLowerCase();
+
+        const bpMatch = lower.match(/(\d{2,3})\s*(?:por|x|\/|e)\s*(\d{1,3})/);
+        if (lower.includes('pressão') || lower.includes('pressao') || bpMatch) {
+          if (bpMatch) {
+            saveVitals(bpMatch[1], bpMatch[2], 'Voz');
+            out.textContent = `"${text}" → Pressão ${bpMatch[1]}x${bpMatch[2]} registrada!`;
+            return;
+          }
+        }
+
+        if (lower.includes('lembrar') || lower.includes('remédio') && !lower.includes('novo') && !lower.includes('inserir')) {
+          const pending = state.medications.filter((m) => !m.takenToday);
+          const msg = pending.length
+            ? `Você tem ${pending.length} remédio(s) hoje: ` + pending.map((m) => `${m.name} às ${m.time}`).join(', ')
+            : 'Parabéns! Você já tomou todos os remédios de hoje.';
+          out.textContent = `"${text}" → ${msg}`;
+          speak(msg);
+          return;
+        }
+
+        if (lower.includes('novo') || lower.includes('inserir') && lower.includes('remédio')) {
+          wizardMode = 'med';
+          wizardStep = 2;
+          renderWizard();
+          out.textContent = `"${text}" → Vamos cadastrar um novo remédio! Qual é o nome dele?`;
+          speak('Certo! Qual é o nome do novo remédio?');
+          document.getElementById('wizardInput').focus();
+          return;
+        }
+
+        if (lower.includes('consulta') || lower.includes('médico') && lower.includes('agendar')) {
+          wizardMode = 'appt';
+          wizardStep = 0;
+          renderWizard();
+          out.textContent = `"${text}" → Vamos agendar sua consulta! Qual o médico ou especialidade?`;
+          speak('Certo! Qual é o médico ou especialidade da consulta?');
+          document.getElementById('wizardInput').focus();
+          return;
+        }
+
+        if (lower.includes('tomei')) {
+          const next = state.medications.find((m) => !m.takenToday);
+          if (next) {
+            confirmMedication(next.id);
+            out.textContent = `"${text}" → Confirmado: ${next.name}!`;
+          } else {
+            out.textContent = `"${text}" → Todos os remédios de hoje já foram confirmados.`;
+          }
+          return;
+        }
+
+        out.textContent = `"${text}" → Diga por exemplo: "Me ajude a lembrar o remédio", "Minha pressão ficou 12 por 8", "Inserir novo remédio" ou "Inserir consulta".`;
+        speak('Não entendi bem. Você pode dizer: me ajude a lembrar o remédio, ou minha pressão ficou 12 por 8.');
+      }
+
+      function startVoiceRecognition() {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) {
+          showToast('Microfone não suportado neste navegador. Use os botões rápidos abaixo.');
+          return;
+        }
+        const btn = document.getElementById('btnVoiceSkill');
+        const lbl = document.getElementById('voiceBtnLabel');
+        const rec = new SpeechRec();
+        rec.lang = 'pt-BR';
+        rec.interimResults = false;
+        btn.classList.add('mic-listening');
+        lbl.textContent = 'OUVINDO... PODE FALAR AGORA';
+        rec.onresult = (e) => {
+          const transcript = e.results[0][0].transcript;
+          processVoiceCommand(transcript);
+        };
+        rec.onerror = () => showToast('Não consegui ouvir. Tente novamente ou use os botões.');
+        rec.onend = () => {
+          btn.classList.remove('mic-listening');
+          lbl.textContent = 'FALAR COM O AGENTE ("Me ajude a lembrar")';
+        };
+        rec.start();
+      }
+
+      // ---- Renderização ----
+      function renderAll() {
+        document.getElementById('greetingTitle').textContent = `Olá, ${state.elderName || 'amigo(a)'}! Como posso ajudar?`;
+        document.getElementById('gasUrlInput').value = state.gasUrl || '';
+
+        const listEl = document.getElementById('elderMedList');
+        listEl.innerHTML = '';
+        const sorted = [...state.medications].sort((a, b) => a.time.localeCompare(b.time));
+        let takenCount = 0;
+
+        sorted.forEach((med) => {
+          if (med.takenToday) takenCount++;
+          const card = document.createElement('div');
+          card.className = `p-4 rounded-2xl border-2 flex flex-wrap items-center justify-between gap-3 ${
+            med.takenToday ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200'
+          }`;
+          card.innerHTML = `
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-2xl font-extrabold text-teal-800">${med.time}</span>
+                <span class="text-xl font-extrabold text-slate-900">${med.name}</span>
+              </div>
+              <p class="text-base text-slate-600 font-semibold">${med.dosage} • Estoque: ${med.stock} un.</p>
+            </div>
+            <div>
+              ${
+                med.takenToday
+                  ? `<span class="inline-block px-4 py-2.5 bg-emerald-600 text-white font-extrabold rounded-xl text-base">✓ Tomado às ${med.takenAt}</span>`
+                  : `<button data-take="${med.id}" class="btn-take px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl text-lg shadow transition">TOMEI ✓</button>`
+              }
+            </div>
+          `;
+          listEl.appendChild(card);
+        });
+
+        document.getElementById('todayProgressBadge').textContent = `${takenCount}/${sorted.length} tomados`;
+
+        const pct = sorted.length ? Math.round((takenCount / sorted.length) * 100) : 0;
+        document.getElementById('kpiAdherence').textContent = `${pct}%`;
+        document.getElementById('kpiPending').textContent = `${sorted.length - takenCount}`;
+        const lastV = state.vitals[state.vitals.length - 1];
+        document.getElementById('kpiLastBP').textContent = lastV ? `${lastV.sys}/${lastV.dia}` : '--/--';
+        const badge = document.getElementById('bpStatusBadge');
+        if (lastV) {
+          badge.textContent = lastV.status;
+          badge.className = `px-3 py-1 rounded-full text-xs font-bold ${
+            lastV.status === 'Crítico' ? 'bg-red-100 text-red-800' : lastV.status === 'Atenção' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+          }`;
+        }
+        document.getElementById('kpiLowStock').textContent = `${sorted.filter((m) => m.stock <= 5).length}`;
+
+        const tbody = document.getElementById('caregiverMedTable');
+        tbody.innerHTML = '';
+        sorted.forEach((med) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="py-2.5 pr-3 font-bold text-slate-900">${med.name}</td>
+            <td class="py-2.5 pr-3 text-slate-600">${med.dosage}</td>
+            <td class="py-2.5 pr-3 font-bold">${med.time}</td>
+            <td class="py-2.5 pr-3 ${med.stock <= 5 ? 'text-red-600 font-extrabold' : 'text-slate-700'}">${med.stock} un.</td>
+            <td class="py-2.5 pr-3">${med.takenToday ? '<span class="text-emerald-700 font-bold">✓ Tomado (' + med.takenAt + ')</span>' : '<span class="text-amber-600 font-bold">⏳ Pendente</span>'}</td>
+            <td class="py-2.5"><button data-del-med="${med.id}" class="text-xs text-red-600 hover:underline font-bold">Remover</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        const apptEl = document.getElementById('apptList');
+        apptEl.innerHTML = '';
+        state.appointments.forEach((a) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm';
+          row.innerHTML = `
+            <div><strong class="text-slate-900">${a.doctor}</strong> • ${a.date} às ${a.time}</div>
+            <button data-del-appt="${a.id}" class="text-red-600 font-bold text-xs hover:underline">Excluir</button>
+          `;
+          apptEl.appendChild(row);
+        });
+
+        renderChart();
+      }
+
+      function renderChart() {
+        const ctx = document.getElementById('bpChart').getContext('2d');
+        if (bpChartInstance) bpChartInstance.destroy();
+        bpChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: state.vitals.map((v) => v.date),
+            datasets: [
+              { label: 'Sistólica (Máxima)', data: state.vitals.map((v) => v.sys), borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.1)', tension: 0.3, fill: true },
+              { label: 'Diastólica (Mínima)', data: state.vitals.map((v) => v.dia), borderColor: '#0f766e', backgroundColor: 'rgba(15,118,110,0.1)', tension: 0.3, fill: true }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { min: 50, max: 190 } }
+          }
+        });
+      }
+
+      // ---- Event Listeners ----
+      document.getElementById('btnWizardNext').addEventListener('click', handleWizardNext);
+      document.getElementById('btnWizardReset').addEventListener('click', () => {
+        wizardMode = 'med';
+        wizardStep = 0;
+        wizardDraft = {};
+        renderWizard();
+      });
+      document.getElementById('btnSpeakQuestion').addEventListener('click', () => {
+        speak(document.getElementById('wizardQuestion').textContent);
+      });
+
+      document.getElementById('btnVoiceSkill').addEventListener('click', startVoiceRecognition);
+      document.querySelectorAll('.quick-cmd').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const cmd = btn.getAttribute('data-cmd');
+          if (cmd === 'lembrar') processVoiceCommand('me ajude a lembrar o remédio');
+          if (cmd === 'novo_remedio') processVoiceCommand('inserir novo remédio');
+          if (cmd === 'pressao') {
+            document.getElementById('vitalsCard').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('inputSys').focus();
+          }
+          if (cmd === 'consulta') processVoiceCommand('inserir consulta');
+        });
+      });
+
+      document.getElementById('btnTestAlert').addEventListener('click', () => triggerUrgentAlert());
+      document.getElementById('btnUrgentConfirm').addEventListener('click', () => confirmMedication(activeUrgentMedId));
+      document.getElementById('btnUrgentSnooze').addEventListener('click', () => {
+        document.getElementById('urgentModal').classList.add('hidden');
+        showToast('Alerta adiado por 10 minutos.');
+      });
+
+      document.getElementById('btnSaveVitals').addEventListener('click', () => {
+        saveVitals(document.getElementById('inputSys').value, document.getElementById('inputDia').value, 'WebApp');
+      });
+
+      document.getElementById('elderMedList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-take]');
+        if (btn) confirmMedication(btn.getAttribute('data-take'));
+      });
+
+      document.getElementById('caregiverMedTable').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-del-med]');
+        if (btn) {
+          const id = btn.getAttribute('data-del-med');
+          state.medications = state.medications.filter((m) => m.id !== id);
+          saveState();
+          renderAll();
+        }
+      });
+
+      document.getElementById('btnAddAppt').addEventListener('click', () => {
+        const doctor = document.getElementById('apptDoc').value.trim();
+        const date = document.getElementById('apptDate').value;
+        const time = document.getElementById('apptTime').value;
+        if (!doctor || !date || !time) {
+          showToast('Preencha médico, data e horário da consulta.');
+          return;
+        }
+        const appt = { id: 'a' + Date.now(), doctor, date, time };
+        state.appointments.push(appt);
+        saveState();
+        syncToSheets('add_appointment', appt);
+        document.getElementById('apptDoc').value = '';
+        renderAll();
+        showToast('Consulta adicionada!');
+      });
+
+      document.getElementById('apptList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-del-appt]');
+        if (btn) {
+          const id = btn.getAttribute('data-del-appt');
+          state.appointments = state.appointments.filter((a) => a.id !== id);
+          saveState();
+          renderAll();
+        }
+      });
+
+      document.getElementById('btnResetDay').addEventListener('click', () => {
+        state.medications.forEach((m) => { m.takenToday = false; m.takenAt = ''; });
+        saveState();
+        renderAll();
+        showToast('Status diário reiniciado para testes.');
+      });
+
+      document.getElementById('btnSaveGasUrl').addEventListener('click', () => {
+        state.gasUrl = document.getElementById('gasUrlInput').value.trim();
+        saveState();
+        showToast('URL do Apps Script salva!');
+      });
+
+      document.getElementById('btnExportJson').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'meu-cuidado-backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      });
+
+      setInterval(() => {
+        const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const due = state.medications.find((m) => !m.takenToday && m.time === now);
+        if (due && document.getElementById('urgentModal').classList.contains('hidden')) {
+          triggerUrgentAlert(due);
+        }
+      }, 30000);
+
       // ---- Tela de Entrada, Configurações e Perfil Sensorial ----
       let deferredPrompt = null;
       window.addEventListener('beforeinstallprompt', (e) => {
@@ -630,441 +1028,16 @@
       });
 
       applySensoryMode();
-
-      renderWizard();
-          speak(steps[wizardStep].q);
-        } else {
-          if (wizardMode === 'med') {
-            const newMed = {
-              id: 'm' + Date.now(),
-              name: wizardDraft.name,
-              dosage: wizardDraft.dosage,
-              time: /^\d{1,2}:\d{2}$/.test(wizardDraft.time) ? wizardDraft.time.padStart(5, '0') : '08:00',
-              stock: 30,
-              takenToday: false,
-              takenAt: ''
-            };
-            state.medications.push(newMed);
-            saveState();
-            syncToSheets('add_medication', newMed);
-            showToast(`Remédio ${newMed.name} cadastrado para ${newMed.time}!`);
-            speak(`Pronto! Cadastrei ${newMed.name}, ${newMed.dosage}, às ${newMed.time}.`);
-          } else {
-            const newAppt = {
-              id: 'a' + Date.now(),
-              doctor: wizardDraft.doctor,
-              date: wizardDraft.date,
-              time: wizardDraft.time
-            };
-            state.appointments.push(newAppt);
-            saveState();
-            syncToSheets('add_appointment', newAppt);
-            showToast(`Consulta agendada: ${newAppt.doctor}`);
-            speak(`Consulta com ${newAppt.doctor} agendada para ${newAppt.date} às ${newAppt.time}.`);
-            wizardMode = 'med';
-          }
-          wizardStep = 2; // próximo cadastro já pula nome/email
-          wizardDraft = {};
-          renderAll();
-        }
-      }
-
-      // ---- Confirmar Dose ----
-      function confirmMedication(id) {
-        const med = state.medications.find((m) => m.id === id);
-        if (!med) return;
-        med.takenToday = true;
-        med.takenAt = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        if (med.stock > 0) med.stock -= 1;
-        saveState();
-        syncToSheets('confirm_dose', med);
-        document.getElementById('urgentModal').classList.add('hidden');
-        showToast(`Ótimo! ${med.name} confirmado às ${med.takenAt}.`);
-        speak(`Muito bem! Registrei que você tomou ${med.name}.`);
-        renderAll();
-      }
-
-      function triggerUrgentAlert(med) {
-        const target = med || state.medications.find((m) => !m.takenToday) || state.medications[0];
-        if (!target) {
-          showToast('Cadastre ao menos um remédio para testar o alerta.');
-          return;
-        }
-        activeUrgentMedId = target.id;
-        document.getElementById('urgentMedName').textContent = `${target.name} ${target.dosage}`;
-        document.getElementById('urgentMedInfo').textContent = `Horário programado: ${target.time}`;
-        document.getElementById('urgentModal').classList.remove('hidden');
-        playAlertBeep();
-        speak(`Atenção ${state.elderName}! Hora de tomar ${target.name}, ${target.dosage}.`);
-      }
-
-      // ---- Sinais Vitais (Pressão) ----
-      function classifyBP(sys, dia) {
-        if (sys >= 140 || dia >= 90) return 'Crítico';
-        if (sys >= 130 || dia >= 85) return 'Atenção';
-        return 'Normal';
-      }
-
-      function saveVitals(rawSys, rawDia, origem) {
-        let sys = parseInt(rawSys, 10);
-        let dia = parseInt(rawDia, 10);
-        if (isNaN(sys) || isNaN(dia)) {
-          showToast('Informe os dois números da pressão (ex.: 120 e 80).');
-          return;
-        }
-        if (sys < 30) sys *= 10;
-        if (dia < 20) dia *= 10;
-        const status = classifyBP(sys, dia);
-        const entry = {
-          id: 'v' + Date.now(),
-          date: new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-          sys,
-          dia,
-          status,
-          origem: origem || 'WebApp'
-        };
-        state.vitals.push(entry);
-        saveState();
-        syncToSheets('add_vitals', entry);
-        document.getElementById('inputSys').value = '';
-        document.getElementById('inputDia').value = '';
-        showToast(`Pressão ${sys}x${dia} salva (${status}).`);
-        speak(`Registrei sua pressão em ${sys} por ${dia}. Classificação: ${status}.`);
-        renderAll();
-      }
-
-      // ---- Interpretador de Comandos de Voz (Skill Local) ----
-      function processVoiceCommand(text) {
-        const box = document.getElementById('voiceTranscriptBox');
-        const out = document.getElementById('voiceTranscriptText');
-        box.classList.remove('hidden');
-        const lower = text.toLowerCase();
-
-        // 1. Pressão arterial: "minha pressão ficou 13 por 8" / "140 por 90"
-        const bpMatch = lower.match(/(\d{2,3})\s*(?:por|x|\/|e)\s*(\d{1,3})/);
-        if (lower.includes('pressão') || lower.includes('pressao') || bpMatch) {
-          if (bpMatch) {
-            saveVitals(bpMatch[1], bpMatch[2], 'Voz');
-            out.textContent = `"${text}" → Pressão ${bpMatch[1]}x${bpMatch[2]} registrada!`;
-            return;
-          }
-        }
-
-        // 2. Lembrar remédio
-        if (lower.includes('lembrar') || lower.includes('remédio') && !lower.includes('novo') && !lower.includes('inserir')) {
-          const pending = state.medications.filter((m) => !m.takenToday);
-          const msg = pending.length
-            ? `Você tem ${pending.length} remédio(s) hoje: ` + pending.map((m) => `${m.name} às ${m.time}`).join(', ')
-            : 'Parabéns! Você já tomou todos os remédios de hoje.';
-          out.textContent = `"${text}" → ${msg}`;
-          speak(msg);
-          return;
-        }
-
-        // 3. Inserir novo remédio
-        if (lower.includes('novo') || lower.includes('inserir') && lower.includes('remédio')) {
-          wizardMode = 'med';
-          wizardStep = 2;
-          renderWizard();
-          out.textContent = `"${text}" → Vamos cadastrar um novo remédio! Qual é o nome dele?`;
-          speak('Certo! Qual é o nome do novo remédio?');
-          document.getElementById('wizardInput').focus();
-          return;
-        }
-
-        // 4. Inserir consulta
-        if (lower.includes('consulta') || lower.includes('médico') && lower.includes('agendar')) {
-          wizardMode = 'appt';
-          wizardStep = 0;
-          renderWizard();
-          out.textContent = `"${text}" → Vamos agendar sua consulta! Qual o médico ou especialidade?`;
-          speak('Certo! Qual é o médico ou especialidade da consulta?');
-          document.getElementById('wizardInput').focus();
-          return;
-        }
-
-        // 5. Confirmar que tomou
-        if (lower.includes('tomei')) {
-          const next = state.medications.find((m) => !m.takenToday);
-          if (next) {
-            confirmMedication(next.id);
-            out.textContent = `"${text}" → Confirmado: ${next.name}!`;
-          } else {
-            out.textContent = `"${text}" → Todos os remédios de hoje já foram confirmados.`;
-          }
-          return;
-        }
-
-        out.textContent = `"${text}" → Diga por exemplo: "Me ajude a lembrar o remédio", "Minha pressão ficou 12 por 8", "Inserir novo remédio" ou "Inserir consulta".`;
-        speak('Não entendi bem. Você pode dizer: me ajude a lembrar o remédio, ou minha pressão ficou 12 por 8.');
-      }
-
-      function startVoiceRecognition() {
-        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRec) {
-          showToast('Microfone não suportado neste navegador. Use os botões rápidos abaixo.');
-          return;
-        }
-        const btn = document.getElementById('btnVoiceSkill');
-        const lbl = document.getElementById('voiceBtnLabel');
-        const rec = new SpeechRec();
-        rec.lang = 'pt-BR';
-        rec.interimResults = false;
-        btn.classList.add('mic-listening');
-        lbl.textContent = 'OUVINDO... PODE FALAR AGORA';
-        rec.onresult = (e) => {
-          const transcript = e.results[0][0].transcript;
-          processVoiceCommand(transcript);
-        };
-        rec.onerror = () => showToast('Não consegui ouvir. Tente novamente ou use os botões.');
-        rec.onend = () => {
-          btn.classList.remove('mic-listening');
-          lbl.textContent = 'FALAR COM O AGENTE ("Me ajude a lembrar")';
-        };
-        rec.start();
-      }
-
-      // ---- Renderização ----
-      function renderAll() {
-        document.getElementById('greetingTitle').textContent = `Olá, ${state.elderName || 'amigo(a)'}! Como posso ajudar?`;
-        document.getElementById('gasUrlInput').value = state.gasUrl || '';
-
-        // Lista Pessoa
-        const listEl = document.getElementById('elderMedList');
-        listEl.innerHTML = '';
-        const sorted = [...state.medications].sort((a, b) => a.time.localeCompare(b.time));
-        let takenCount = 0;
-
-        sorted.forEach((med) => {
-          if (med.takenToday) takenCount++;
-          const card = document.createElement('div');
-          card.className = `p-4 rounded-2xl border-2 flex flex-wrap items-center justify-between gap-3 ${
-            med.takenToday ? 'bg-emerald-50 border-emerald-300' : 'bg-white border-slate-200'
-          }`;
-          card.innerHTML = `
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="text-2xl font-extrabold text-teal-800">${med.time}</span>
-                <span class="text-xl font-extrabold text-slate-900">${med.name}</span>
-              </div>
-              <p class="text-base text-slate-600 font-semibold">${med.dosage} • Estoque: ${med.stock} un.</p>
-            </div>
-            <div>
-              ${
-                med.takenToday
-                  ? `<span class="inline-block px-4 py-2.5 bg-emerald-600 text-white font-extrabold rounded-xl text-base">✓ Tomado às ${med.takenAt}</span>`
-                  : `<button data-take="${med.id}" class="btn-take px-6 py-3.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-xl text-lg shadow transition">TOMEI ✓</button>`
-              }
-            </div>
-          `;
-          listEl.appendChild(card);
-        });
-
-        document.getElementById('todayProgressBadge').textContent = `${takenCount}/${sorted.length} tomados`;
-
-        // KPIs Cuidador
-        const pct = sorted.length ? Math.round((takenCount / sorted.length) * 100) : 0;
-        document.getElementById('kpiAdherence').textContent = `${pct}%`;
-        document.getElementById('kpiPending').textContent = `${sorted.length - takenCount}`;
-        const lastV = state.vitals[state.vitals.length - 1];
-        document.getElementById('kpiLastBP').textContent = lastV ? `${lastV.sys}/${lastV.dia}` : '--/--';
-        const badge = document.getElementById('bpStatusBadge');
-        if (lastV) {
-          badge.textContent = lastV.status;
-          badge.className = `px-3 py-1 rounded-full text-xs font-bold ${
-            lastV.status === 'Crítico' ? 'bg-red-100 text-red-800' : lastV.status === 'Atenção' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-          }`;
-        }
-        document.getElementById('kpiLowStock').textContent = `${sorted.filter((m) => m.stock <= 5).length}`;
-
-        // Tabela Cuidador
-        const tbody = document.getElementById('caregiverMedTable');
-        tbody.innerHTML = '';
-        sorted.forEach((med) => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="py-2.5 pr-3 font-bold text-slate-900">${med.name}</td>
-            <td class="py-2.5 pr-3 text-slate-600">${med.dosage}</td>
-            <td class="py-2.5 pr-3 font-bold">${med.time}</td>
-            <td class="py-2.5 pr-3 ${med.stock <= 5 ? 'text-red-600 font-extrabold' : 'text-slate-700'}">${med.stock} un.</td>
-            <td class="py-2.5 pr-3">${med.takenToday ? '<span class="text-emerald-700 font-bold">✓ Tomado (' + med.takenAt + ')</span>' : '<span class="text-amber-600 font-bold">⏳ Pendente</span>'}</td>
-            <td class="py-2.5"><button data-del-med="${med.id}" class="text-xs text-red-600 hover:underline font-bold">Remover</button></td>
-          `;
-          tbody.appendChild(tr);
-        });
-
-        // Consultas
-        const apptEl = document.getElementById('apptList');
-        apptEl.innerHTML = '';
-        state.appointments.forEach((a) => {
-          const row = document.createElement('div');
-          row.className = 'flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 text-sm';
-          row.innerHTML = `
-            <div><strong class="text-slate-900">${a.doctor}</strong> • ${a.date} às ${a.time}</div>
-            <button data-del-appt="${a.id}" class="text-red-600 font-bold text-xs hover:underline">Excluir</button>
-          `;
-          apptEl.appendChild(row);
-        });
-
-        renderChart();
-      }
-
-      function renderChart() {
-        const ctx = document.getElementById('bpChart').getContext('2d');
-        if (bpChartInstance) bpChartInstance.destroy();
-        bpChartInstance = new Chart(ctx, {
-          type: 'line',
-          data: {
-            labels: state.vitals.map((v) => v.date),
-            datasets: [
-              { label: 'Sistólica (Máxima)', data: state.vitals.map((v) => v.sys), borderColor: '#dc2626', backgroundColor: 'rgba(220,38,38,0.1)', tension: 0.3, fill: true },
-              { label: 'Diastólica (Mínima)', data: state.vitals.map((v) => v.dia), borderColor: '#0f766e', backgroundColor: 'rgba(15,118,110,0.1)', tension: 0.3, fill: true }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { y: { min: 50, max: 190 } }
-          }
-        });
-      }
-
-      // ---- Event Listeners ----
-      document.getElementById('tabPessoa').addEventListener('click', () => {
-        document.getElementById('viewPessoa').classList.remove('hidden');
-        document.getElementById('viewCuidador').classList.add('hidden');
-        document.getElementById('tabPessoa').className = 'px-4 py-2 rounded-lg text-sm font-bold bg-white text-teal-900 shadow transition';
-        document.getElementById('tabCuidador').className = 'px-4 py-2 rounded-lg text-sm font-bold text-teal-100 hover:bg-teal-700 transition';
-      });
-
-      document.getElementById('tabCuidador').addEventListener('click', () => {
-        document.getElementById('viewCuidador').classList.remove('hidden');
-        document.getElementById('viewPessoa').classList.add('hidden');
-        document.getElementById('tabCuidador').className = 'px-4 py-2 rounded-lg text-sm font-bold bg-white text-teal-900 shadow transition';
-        document.getElementById('tabPessoa').className = 'px-4 py-2 rounded-lg text-sm font-bold text-teal-100 hover:bg-teal-700 transition';
-        renderChart();
-      });
-
-      document.getElementById('btnWizardNext').addEventListener('click', handleWizardNext);
-      document.getElementById('btnWizardReset').addEventListener('click', () => {
-        wizardMode = 'med';
-        wizardStep = 0;
-        wizardDraft = {};
-        renderWizard();
-      });
-      document.getElementById('btnSpeakQuestion').addEventListener('click', () => {
-        speak(document.getElementById('wizardQuestion').textContent);
-      });
-
-      document.getElementById('btnVoiceSkill').addEventListener('click', startVoiceRecognition);
-      document.querySelectorAll('.quick-cmd').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const cmd = btn.getAttribute('data-cmd');
-          if (cmd === 'lembrar') processVoiceCommand('me ajude a lembrar o remédio');
-          if (cmd === 'novo_remedio') processVoiceCommand('inserir novo remédio');
-          if (cmd === 'pressao') {
-            document.getElementById('vitalsCard').scrollIntoView({ behavior: 'smooth' });
-            document.getElementById('inputSys').focus();
-          }
-          if (cmd === 'consulta') processVoiceCommand('inserir consulta');
-        });
-      });
-
-      document.getElementById('btnTestAlert').addEventListener('click', () => triggerUrgentAlert());
-      document.getElementById('btnUrgentConfirm').addEventListener('click', () => confirmMedication(activeUrgentMedId));
-      document.getElementById('btnUrgentSnooze').addEventListener('click', () => {
-        document.getElementById('urgentModal').classList.add('hidden');
-        showToast('Alerta adiado por 10 minutos.');
-      });
-
-      document.getElementById('btnSaveVitals').addEventListener('click', () => {
-        saveVitals(document.getElementById('inputSys').value, document.getElementById('inputDia').value, 'WebApp');
-      });
-
-      document.getElementById('elderMedList').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-take]');
-        if (btn) confirmMedication(btn.getAttribute('data-take'));
-      });
-
-      document.getElementById('caregiverMedTable').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-del-med]');
-        if (btn) {
-          const id = btn.getAttribute('data-del-med');
-          state.medications = state.medications.filter((m) => m.id !== id);
-          saveState();
-          renderAll();
-        }
-      });
-
-      document.getElementById('btnAddAppt').addEventListener('click', () => {
-        const doctor = document.getElementById('apptDoc').value.trim();
-        const date = document.getElementById('apptDate').value;
-        const time = document.getElementById('apptTime').value;
-        if (!doctor || !date || !time) {
-          showToast('Preencha médico, data e horário da consulta.');
-          return;
-        }
-        const appt = { id: 'a' + Date.now(), doctor, date, time };
-        state.appointments.push(appt);
-        saveState();
-        syncToSheets('add_appointment', appt);
-        document.getElementById('apptDoc').value = '';
-        renderAll();
-        showToast('Consulta adicionada!');
-      });
-
-      document.getElementById('apptList').addEventListener('click', (e) => {
-        const btn = e.target.closest('[data-del-appt]');
-        if (btn) {
-          const id = btn.getAttribute('data-del-appt');
-          state.appointments = state.appointments.filter((a) => a.id !== id);
-          saveState();
-          renderAll();
-        }
-      });
-
-      document.getElementById('btnResetDay').addEventListener('click', () => {
-        state.medications.forEach((m) => { m.takenToday = false; m.takenAt = ''; });
-        saveState();
-        renderAll();
-        showToast('Status diário reiniciado para testes.');
-      });
-
-      document.getElementById('btnSaveGasUrl').addEventListener('click', () => {
-        state.gasUrl = document.getElementById('gasUrlInput').value.trim();
-        saveState();
-        showToast('URL do Apps Script salva!');
-      });
-
-      document.getElementById('btnExportJson').addEventListener('click', () => {
-        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'cuidafacil-backup.json';
-        a.click();
-        URL.revokeObjectURL(url);
-      });
-
-      // Verificador automático a cada 30s para disparar o alerta vermelho no horário exato
-      setInterval(() => {
-        const now = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const due = state.medications.find((m) => !m.takenToday && m.time === now);
-        if (due && document.getElementById('urgentModal').classList.contains('hidden')) {
-          triggerUrgentAlert(due);
-        }
-      }, 30000);
-
       renderWizard();
       renderAll();
     })();
   </script>
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
-    });
-  }
-</script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
 </body>
 </html>
