@@ -40,7 +40,6 @@
         <p id="cmMedInfo" class="text-sm text-slate-600 mt-1"></p>
       </div>
 
-      <!-- Passo 1: Indo pegar -->
       <div id="cmStep1" class="space-y-3">
         <p class="text-sm text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200">
           Passo 1: Vá até o local do remédio e pegue um copo de água.
@@ -53,20 +52,17 @@
         </button>
       </div>
 
-      <!-- Passo 2: Aguardo + Prova opcional (QR / Foto) -->
       <div id="cmStep2" class="hidden space-y-3">
         <div id="cmTimerBox" class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm text-center font-medium">
           Aguarde <span id="cmCountdown">15</span>s enquanto você toma com água...
         </div>
 
-        <!-- Leitor QR Code (se habilitado) -->
         <div id="cmQrBox" class="hidden space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
           <p class="text-xs font-semibold text-slate-700">Aponte a câmera para o QR Code da caixa:</p>
           <video id="qrVideo" class="w-full h-44 bg-black rounded-lg object-cover" playsinline muted></video>
           <p id="qrStatus" class="text-xs text-teal-700 font-medium">Procurando QR Code...</p>
         </div>
 
-        <!-- Foto da dose (se habilitada) -->
         <div id="cmPhotoBox" class="hidden space-y-2 p-3 rounded-xl bg-slate-50 border border-slate-200">
           <p class="text-xs font-semibold text-slate-700">Foto rápida da dose na mão:</p>
           <input id="photoInput" type="file" accept="image/*" capture="environment" class="w-full text-xs" />
@@ -81,7 +77,7 @@
     </div>
   </div>
 
-  <!-- MODAL 2: Preciso de Ajuda Agora (Respiração / Triagem + SAMU + Rede de Apoio + Cartão) -->
+  <!-- MODAL 2: Preciso de Ajuda Agora -->
   <div id="helpModal" class="fixed inset-0 z-50 hidden bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
       <div class="flex items-center justify-between">
@@ -89,7 +85,6 @@
         <button id="btnCloseHelp" class="text-sm text-slate-500 hover:text-slate-900 font-semibold">Fechar</button>
       </div>
 
-      <!-- Menu inicial de ajuda -->
       <div id="helpMenu" class="space-y-2.5">
         <button id="btnHelpCalm" class="lv-btn w-full py-3.5 px-4 bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-950 font-semibold rounded-xl text-left">
           🌿 Estou ansioso(a) / sobrecarregado(a) — Acalmar
@@ -106,7 +101,6 @@
         </div>
       </div>
 
-      <!-- Subtela: Respiração 4-4-4 -->
       <div id="helpCalmView" class="hidden text-center space-y-5 py-3">
         <p class="text-sm text-slate-600">Respire devagar acompanhando o círculo:</p>
         <div class="w-32 h-32 mx-auto rounded-full bg-teal-100 border-4 border-teal-600 flex items-center justify-center breath-circle">
@@ -115,7 +109,6 @@
         <button class="help-back w-full py-2.5 bg-slate-100 rounded-xl text-sm font-medium text-slate-700">Voltar</button>
       </div>
 
-      <!-- Subtela: Triagem Rápida -->
       <div id="helpSickView" class="hidden space-y-3">
         <p class="text-sm font-semibold text-slate-800">Você está sentindo algum destes sinais agora?</p>
         <ul class="text-sm text-slate-700 space-y-1.5 bg-rose-50 p-3 rounded-xl border border-rose-200">
@@ -131,7 +124,6 @@
         <button class="help-back w-full py-2 bg-slate-100 rounded-xl text-sm text-slate-700">Voltar</button>
       </div>
 
-      <!-- Subtela: Cartão de Emergência -->
       <div id="helpCardView" class="hidden space-y-3">
         <div class="p-4 rounded-xl bg-slate-900 text-white space-y-2 text-sm">
           <p class="text-xs uppercase tracking-wider text-teal-300 font-bold">Cartão de Emergência Médica</p>
@@ -183,7 +175,7 @@
       </div>
 
       <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
-        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">1. Seus Dados e Contato de Confiança</p>
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-500">1. Entrar com Gmail (sincroniza PC e Celular)</p>
         <div id="googleBtnContainer" class="flex justify-center"></div>
         <div id="googleUserBadge" class="hidden flex items-center gap-2.5 bg-white p-2 rounded-lg border border-teal-200 text-xs">
           <img id="googleAvatar" src="" alt="" class="w-8 h-8 rounded-full" />
@@ -233,14 +225,12 @@
 
       <!-- TAB 1: MEU DIA -->
       <section id="viewHome" class="space-y-4">
-        <!-- Barra Superior de Autonomia: Ajuda + Estou Bem + Água -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <button id="btnNeedHelp" class="lv-btn py-3 px-4 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-sm shadow-sm">Preciso de Ajuda Agora</button>
           <button id="btnImOk" class="lv-btn py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-sm shadow-sm">👍 Estou bem hoje</button>
           <button id="btnWater" class="lv-btn py-3 px-4 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-900 font-semibold rounded-xl text-sm">💧 Água: <span id="waterCount">0</span></button>
         </div>
 
-        <!-- CARD "AGORA" (Foco Único — Zero sobrecarga) -->
         <div class="bg-white rounded-2xl border-2 border-teal-600 p-5 space-y-3 shadow-sm">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold uppercase tracking-wider text-teal-700">Agora (Próximo Passo)</span>
@@ -250,7 +240,6 @@
           <div id="nowCardActions" class="flex flex-wrap gap-2"></div>
         </div>
 
-        <!-- Assistente por Voz (Área Grande para Baixa Visão) -->
         <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
           <button id="btnVoice" class="lv-btn w-full py-5 px-4 bg-teal-700 hover:bg-teal-800 text-white rounded-xl font-bold text-base flex items-center justify-center gap-2 transition">
             <span>🎙️</span><span id="voiceLabel">Falar com o Assistente (Ouvir / Cadastrar)</span>
@@ -264,7 +253,6 @@
           </div>
         </div>
 
-        <!-- Inserir Novo Remédio / Informação -->
         <div id="quickAddCard" class="hidden bg-white rounded-2xl border border-teal-200 p-5 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-bold text-slate-900">Inserir Medicação ou Rotina</h3>
@@ -278,13 +266,11 @@
           <button id="btnSaveMed" class="w-full py-2.5 bg-teal-700 hover:bg-teal-800 text-white font-semibold rounded-xl text-sm">Salvar na Agenda</button>
         </div>
 
-        <!-- Agenda Completa de Hoje -->
         <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
           <h3 class="text-base font-bold text-slate-900">Agenda de Hoje</h3>
           <div id="medList" class="space-y-2.5"></div>
         </div>
 
-        <!-- Inserir Pressão e Glicemia -->
         <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-3">
           <h3 class="text-base font-bold text-slate-900">Inserir Sinais Vitais (Pressão / Glicose)</h3>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -302,7 +288,7 @@
           <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Adesão Hoje</p><p id="kpiAdh" class="text-2xl font-bold text-teal-700 mt-1">0%</p></div>
           <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Pendentes</p><p id="kpiPend" class="text-2xl font-bold text-amber-600 mt-1">0</p></div>
           <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Última Pressão</p><p id="kpiBP" class="text-2xl font-bold text-slate-900 mt-1">--/--</p></div>
-          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Último Check-in</p><p id="kpiCheckin" class="text-sm font-bold text-emerald-700 mt-2">Hoje</p></div>
+          <div class="bg-white p-4 rounded-2xl border border-slate-200"><p class="text-xs text-slate-500">Último Check-in</p><p id="kpiCheckin" class="text-sm font-bold text-emerald-700 mt-2">-</p></div>
         </div>
 
         <div class="bg-white p-5 rounded-2xl border border-slate-200">
@@ -313,14 +299,12 @@
           <div class="relative h-64"><canvas id="bpChart"></canvas></div>
         </div>
 
-        <!-- Gerador de Etiqueta QR Code para Colar na Caixa -->
         <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
           <h3 class="text-sm font-bold text-slate-900">Etiquetas QR Code para Caixa de Remédio</h3>
           <p class="text-xs text-slate-600">Imprima e cole na caixa/porta-comprimidos quando a validação por QR Code estiver ligada.</p>
           <div id="qrLabelsList" class="grid sm:grid-cols-2 gap-3"></div>
         </div>
 
-        <!-- Consultas -->
         <div class="bg-white p-5 rounded-2xl border border-slate-200 space-y-3">
           <h3 class="text-sm font-bold text-slate-900">Consultas &amp; Exames</h3>
           <div class="grid sm:grid-cols-4 gap-2">
@@ -336,7 +320,7 @@
       <!-- TAB 3: CONFIGURAÇÕES -->
       <section id="viewConfig" class="hidden space-y-5">
         <div class="bg-white rounded-2xl border border-slate-200 p-5 space-y-4">
-          <h2 class="text-base font-bold text-slate-900">Configurações, Acessibilidade e Antifraude</h2>
+          <h2 class="text-base font-bold text-slate-900">Configurações, Acessibilidade, Alexa e Segurança</h2>
           <div class="grid sm:grid-cols-2 gap-3">
             <div><label class="block text-xs font-semibold text-slate-600 mb-1">Nome da Pessoa</label><input id="cfgName" type="text" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
             <div><label class="block text-xs font-semibold text-slate-600 mb-1">Telefone do Apoio (Emergência)</label><input id="cfgPhone" type="tel" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm" /></div>
@@ -359,20 +343,23 @@
             </div>
           </div>
 
-          <!-- Chaves Ligáveis: QR Code, Foto, Voz Contínua -->
           <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5 text-sm">
-            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Controles de Confirmação e Voz</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Controles de Confirmação, Voz e Alexa</p>
             <label class="flex items-center gap-2"><input id="cfgReqQr" type="checkbox" class="w-4 h-4 accent-teal-700" /> Exigir leitura de <strong>QR Code da caixa</strong> para confirmar remédio</label>
             <label class="flex items-center gap-2"><input id="cfgReqPhoto" type="checkbox" class="w-4 h-4 accent-teal-700" /> Exigir <strong>foto rápida da dose</strong> para confirmar remédio</label>
             <label class="flex items-center gap-2"><input id="cfgContVoice" type="checkbox" class="w-4 h-4 accent-teal-700" /> <strong>Voz Contínua</strong> (ler pergunta e abrir microfone automático)</label>
+            <label class="flex items-center gap-2 pt-1 border-t border-slate-200"><input id="cfgHasAlexa" type="checkbox" class="w-4 h-4 accent-teal-700" /> <strong>Usa Alexa em casa</strong> (Echo Dot / Alexa no celular)</label>
+            <div id="alexaCodeBox" class="hidden p-2.5 bg-white rounded-lg border border-teal-200 text-xs text-slate-700">
+              Seu código de vínculo para falar na Alexa (<em>"Alexa, abrir meu cuidado"</em> → <em>"meu código é ..."</em>):
+              <strong id="cfgAlexaCode" class="text-base text-teal-800 ml-1">----</strong>
+            </div>
           </div>
-
-
 
           <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
             <div class="flex gap-2">
               <button id="btnInstall" class="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold">Instalar no Celular</button>
               <button id="btnResetSetup" class="px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium">Tela Inicial</button>
+              <button id="btnSyncNow" class="px-3.5 py-2 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-semibold">Sincronizar Planilha</button>
             </div>
             <button id="btnSaveCfg" class="px-5 py-2 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-sm font-semibold">Salvar</button>
           </div>

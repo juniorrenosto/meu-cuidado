@@ -1,6 +1,7 @@
 (function () {
-  const STORAGE_KEY = 'meu_cuidado_v3';
+  const STORAGE_KEY = 'meu_cuidado_v7';
   const DEFAULT_GAS = 'https://script.google.com/macros/s/AKfycbzBboHCuLaPbyI6BliNEpWalWmcTC_4KgyM3Ua44GZbe46EQrnBP50Yteep-UQtFPOTWA/exec';
+  const GOOGLE_CLIENT_ID = '400634410081-usp328ku7tm6aeu9pmu494k0te0h4h7r.apps.googleusercontent.com';
 
   const defaultState = {
     configured: false,
@@ -15,7 +16,8 @@
     requireQr: false,
     requirePhoto: false,
     continuousVoice: false,
-    googleClientId: '400634410081-usp328ku7tm6aeu9pmu494k0te0h4h7r.apps.googleusercontent.com',
+    hasAlexa: false,
+    alexaCode: '',
     gasUrl: DEFAULT_GAS,
     waterCount: 0,
     lastCheckin: '',
@@ -32,6 +34,7 @@
   let qrValidated = false;
   let photoAttached = false;
   let deferredInstall = null;
+  let profileLoadedFromCloud = false;
 
   function loadState() {
     try {
@@ -47,6 +50,7 @@
 
   function toast(msg) {
     const el = document.getElementById('toast');
+    if (!el) return;
     el.textContent = msg;
     el.classList.remove('hidden');
     setTimeout(() => el.classList.add('hidden'), 3200);
@@ -67,6 +71,25 @@
     } catch (e) {}
   }
 
+  function buildProfilePayload() {
+    if (state.hasAlexa && !state.alexaCode) {
+      state.alexaCode = String(Math.floor(1000 + Math.random() * 9000));
+    }
+    return {
+      userName: state.userName,
+      supportPhone: state.supportPhone,
+      supportEmail: state.supportEmail,
+      allergies: state.allergies,
+      sensoryMode: state.sensoryMode,
+      voiceRate: state.voiceRate,
+      requireQr: state.requireQr,
+      requirePhoto: state.requirePhoto,
+      continuousVoice: state.continuousVoice,
+      hasAlexa: state.hasAlexa,
+      alexaCode: state.alexaCode
+    };
+  }
+
   async function sync(action, payload) {
     if (!state.gasUrl || !state.gasUrl.startsWith('https://')) return;
     const st = document.getElementById('syncStatus');
@@ -81,7 +104,7 @@
           userEmail: state.userEmail || '',
           userName: state.userName || 'Usuário',
           elderName: state.userName || 'Usuário',
-          caregiverEmail: state.supportEmail,
+          caregiverEmail: state.supportEmail || '',
           payload
         })
       });
@@ -91,26 +114,33 @@
     }
   }
 
-    async function loadFromSheets(email) {
-    if (!email || !state.gasUrl) return;
+  async function loadFromSheets(email) {
+    if (!email || !state.gasUrl) return false;
+    const st = document.getElementById('syncStatus');
     try {
-      const resp = await fetch(`${state.gasUrl}?action=load&email=${encodeURIComponent(email)}`, { redirect: "follow" });
+      if (st) st.textContent = 'Buscando dados na planilha...';
+      const resp = await fetch(`${state.gasUrl}?action=load&email=${encodeURIComponent(email)}`, { redirect: 'follow' });
       const data = await resp.json();
       if (data && data.ok) {
         if (data.profile) {
+          profileLoadedFromCloud = true;
           Object.assign(state, data.profile);
           if (document.getElementById('setupName')) document.getElementById('setupName').value = state.userName || '';
           if (document.getElementById('setupSupportPhone')) document.getElementById('setupSupportPhone').value = state.supportPhone || '';
           if (document.getElementById('setupSupportEmail')) document.getElementById('setupSupportEmail').value = state.supportEmail || '';
         }
-        if (Array.isArray(data.medications) && data.medications.length) state.medications = data.medications;
-        if (Array.isArray(data.vitals) && data.vitals.length) state.vitals = data.vitals;
-        if (Array.isArray(data.appointments) && data.appointments.length) state.appointments = data.appointments;
+        if (Array.isArray(data.medications)) state.medications = data.medications;
+        if (Array.isArray(data.vitals)) state.vitals = data.vitals;
+        if (Array.isArray(data.appointments)) state.appointments = data.appointments;
         saveState();
         renderAll();
-        toast("Dados sincronizados da planilha!");
+        if (st) st.textContent = 'Sincronizado com sucesso!';
+        return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      if (st) st.textContent = 'Erro ao buscar planilha (usando dados locais).';
+    }
+    return false;
   }
 
   // ---- Google Sign-In ----
@@ -120,31 +150,43 @@
   }
 
   function initGoogleSignIn() {
-    const cid = state.googleClientId || '400634410081-usp328ku7tm6aeu9pmu494k0te0h4h7r.apps.googleusercontent.com';
-    if (typeof google === 'undefined' || !google.accounts) { setTimeout(initGoogleSignIn, 500); return; }
+    if (typeof google === 'undefined' || !google.accounts) {
+      setTimeout(initGoogleSignIn, 500);
+      return;
+    }
     try {
       google.accounts.id.initialize({
-        client_id: cid,
-        callback: (res) => {
+        client_id: GOOGLE_CLIENT_ID,
+        callback: async (res) => {
           const info = decodeJwt(res.credential);
-          state.userName = info.name || state.userName;
+          state.userName = state.userName || info.name || '';
           state.userEmail = info.email || '';
           state.userAvatar = info.picture || '';
           document.getElementById('setupName').value = state.userName;
-          document.getElementById('googleName').textContent = state.userName;
+          document.getElementById('googleName').textContent = info.name || state.userName;
           document.getElementById('googleEmail').textContent = state.userEmail;
           document.getElementById('googleAvatar').src = state.userAvatar;
           document.getElementById('googleUserBadge').classList.remove('hidden');
           saveState();
-          toast('Conta Google conectada! Buscando dados...');
-          loadFromSheets(state.userEmail);
+          toast('Conta Google conectada! Sincronizando...');
+          await loadFromSheets(state.userEmail);
+          if (profileLoadedFromCloud && state.userName) {
+            state.configured = true;
+            saveState();
+            document.getElementById('setupScreen').classList.add('hidden');
+            document.getElementById('appShell').classList.remove('hidden');
+            renderAll();
+          }
         }
       });
-      google.accounts.id.renderButton(document.getElementById('googleBtnContainer'), { theme: 'outline', size: 'large', width: 300 });
+      const container = document.getElementById('googleBtnContainer');
+      if (container) {
+        container.innerHTML = '';
+        google.accounts.id.renderButton(container, { theme: 'outline', size: 'large', width: 300 });
+      }
     } catch (e) {}
   }
 
-  // ---- Setup Screen ----
   function showSetup() {
     document.getElementById('setupScreen').classList.remove('hidden');
     document.getElementById('appShell').classList.add('hidden');
@@ -164,12 +206,8 @@
     if (!state.userName) { toast('Informe seu nome para começar.'); return; }
     state.configured = true;
     saveState();
-    if (state.userEmail) {
-      sync('save_profile', {
-        userName: state.userName, supportPhone: state.supportPhone, supportEmail: state.supportEmail,
-        allergies: state.allergies, sensoryMode: state.sensoryMode, voiceRate: state.voiceRate,
-        requireQr: state.requireQr, requirePhoto: state.requirePhoto, continuousVoice: state.continuousVoice
-      });
+    if (state.userEmail && !profileLoadedFromCloud) {
+      sync('save_profile', buildProfilePayload());
     }
     document.getElementById('setupScreen').classList.add('hidden');
     document.getElementById('appShell').classList.remove('hidden');
@@ -177,7 +215,6 @@
     if (withVoice) speak(`Olá ${state.userName}. Estou pronto para ajudar.`, true);
   }
 
-  // ---- Sensory & Visual ----
   function applyVisualProfile() {
     document.body.classList.toggle('low-vision', state.sensoryMode === 'lowvision');
     const box = document.getElementById('confirmBox');
@@ -188,7 +225,6 @@
     }
   }
 
-  // ---- Tabs ----
   function switchTab(tabId) {
     ['viewHome', 'viewSupport', 'viewConfig'].forEach(id => {
       document.getElementById(id).classList.toggle('hidden', id !== tabId);
@@ -210,10 +246,12 @@
       document.getElementById('cfgReqQr').checked = !!state.requireQr;
       document.getElementById('cfgReqPhoto').checked = !!state.requirePhoto;
       document.getElementById('cfgContVoice').checked = !!state.continuousVoice;
-          }
+      document.getElementById('cfgHasAlexa').checked = !!state.hasAlexa;
+      document.getElementById('alexaCodeBox').classList.toggle('hidden', !state.hasAlexa);
+      document.getElementById('cfgAlexaCode').textContent = state.alexaCode || '----';
+    }
   }
 
-  // ---- Render ----
   function renderAll() {
     applyVisualProfile();
     document.getElementById('headerUserLabel').textContent = state.userEmail || state.userName || 'Saúde & Rotinas';
@@ -229,7 +267,6 @@
     const pct = sorted.length ? Math.round((doneCount / sorted.length) * 100) : 0;
     document.getElementById('progressText').textContent = `${doneCount}/${sorted.length} (${pct}%)`;
 
-    // Card "Agora"
     const nowC = document.getElementById('nowCardContent');
     const nowA = document.getElementById('nowCardActions');
     if (pending.length) {
@@ -241,9 +278,8 @@
       nowA.innerHTML = '';
     }
 
-    // Lista Agenda
     const list = document.getElementById('medList');
-    list.innerHTML = '';
+    list.innerHTML = sorted.length ? '' : '<p class="text-xs text-slate-400">Sua agenda está vazia.</p>';
     sorted.forEach(m => {
       const row = document.createElement('div');
       row.className = `p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 ${m.takenToday ? 'bg-emerald-50/70 border-emerald-200' : 'bg-white border-slate-200'}`;
@@ -262,16 +298,14 @@
       list.appendChild(row);
     });
 
-    // KPIs Rede de Apoio
     document.getElementById('kpiAdh').textContent = pct + '%';
     document.getElementById('kpiPend').textContent = String(pending.length);
-    document.getElementById('kpiCheckin').textContent = state.lastCheckin || 'Pendente';
+    document.getElementById('kpiCheckin').textContent = state.lastCheckin || '-';
     const lastV = state.vitals[state.vitals.length - 1];
     document.getElementById('kpiBP').textContent = lastV ? `${lastV.sys}/${lastV.dia}` : '--/--';
 
-    // Etiquetas QR Code
     const qrBox = document.getElementById('qrLabelsList');
-    qrBox.innerHTML = '';
+    qrBox.innerHTML = sorted.length ? '' : '<p class="text-xs text-slate-400">Cadastre um remédio para gerar etiquetas QR.</p>';
     sorted.forEach(m => {
       const code = `MEUCUIDADO:${m.id}:${m.name}`;
       const div = document.createElement('div');
@@ -283,7 +317,6 @@
       qrBox.appendChild(div);
     });
 
-    // Consultas
     const apptEl = document.getElementById('apptList');
     apptEl.innerHTML = state.appointments.length ? '' : '<p class="text-xs text-slate-400">Nenhuma consulta agendada.</p>';
     state.appointments.forEach(a => {
@@ -293,7 +326,6 @@
       apptEl.appendChild(d);
     });
 
-    // Cartão de Emergência
     document.getElementById('ecName').textContent = state.userName || '-';
     document.getElementById('ecAllergies').textContent = state.allergies || 'Nenhuma informada';
     document.getElementById('ecMeds').textContent = sorted.map(m => `${m.name} (${m.dosage} às ${m.time})`).join(', ') || '-';
@@ -321,7 +353,6 @@
     } catch (e) {}
   }
 
-  // ---- Fluxo de Confirmação em 2 Tempos + QR + Foto ----
   function stopCamera() {
     if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
   }
@@ -332,7 +363,6 @@
     activeConfirmId = id;
     qrValidated = !state.requireQr;
     photoAttached = !state.requirePhoto;
-
     document.getElementById('cmMedName').textContent = `${m.name} (${m.dosage})`;
     document.getElementById('cmMedInfo').textContent = `Horário programado: ${m.time}`;
     document.getElementById('cmStep1').classList.remove('hidden');
@@ -342,8 +372,7 @@
   }
 
   function checkCanFinishConfirm(secondsLeft) {
-    const ok = secondsLeft <= 0 && qrValidated && photoAttached;
-    document.getElementById('btnCmFinal').disabled = !ok;
+    document.getElementById('btnCmFinal').disabled = !(secondsLeft <= 0 && qrValidated && photoAttached);
   }
 
   function startStep2() {
@@ -368,7 +397,7 @@
       checkCanFinishConfirm(sec);
     }, 1000);
 
-    if (state.requireQr) startQrScanner(sec);
+    if (state.requireQr) startQrScanner();
   }
 
   async function startQrScanner() {
@@ -397,7 +426,7 @@
         scan();
       } else {
         qrValidated = true;
-        statusEl.textContent = 'Leitor nativo indisponível neste navegador — liberado após contagem.';
+        statusEl.textContent = 'Leitor nativo indisponível — liberado após contagem.';
       }
     } catch (e) {
       qrValidated = true;
@@ -421,7 +450,6 @@
     speak(`Muito bem! ${m.name} registrado.`);
   }
 
-  // ---- Sinais Vitais ----
   function saveVitals(rawSys, rawDia, rawGlu, origem) {
     let sys = parseInt(rawSys, 10), dia = parseInt(rawDia, 10);
     const glu = rawGlu ? parseInt(rawGlu, 10) : '';
@@ -441,7 +469,6 @@
     speak(`Pressão ${sys} por ${dia} salva.`);
   }
 
-  // ---- Voz ----
   function startVoice() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) { toast('Microfone não suportado neste navegador.'); return; }
@@ -540,6 +567,7 @@
   document.getElementById('btnTestModal').addEventListener('click', () => {
     const next = state.medications.find(m => !m.takenToday) || state.medications[0];
     if (next) openConfirmFlow(next.id);
+    else toast('Cadastre um remédio primeiro para testar o aviso.');
   });
 
   document.getElementById('btnCmGoing').addEventListener('click', startStep2);
@@ -554,7 +582,6 @@
     }
   });
 
-  // Ajuda Modal
   function showHelpSub(subId) {
     ['helpMenu', 'helpCalmView', 'helpSickView', 'helpCardView'].forEach(id => document.getElementById(id).classList.toggle('hidden', id !== subId));
   }
@@ -565,7 +592,6 @@
   document.getElementById('btnHelpCard').addEventListener('click', () => showHelpSub('helpCardView'));
   document.querySelectorAll('.help-back').forEach(b => b.addEventListener('click', () => showHelpSub('helpMenu')));
 
-  // Pós-consulta
   document.getElementById('btnOpenPostConsult').addEventListener('click', () => document.getElementById('postConsultModal').classList.remove('hidden'));
   document.getElementById('btnClosePostConsult').addEventListener('click', () => document.getElementById('postConsultModal').classList.add('hidden'));
   document.getElementById('btnSavePostConsult').addEventListener('click', () => {
@@ -604,6 +630,13 @@
     if (b) { state.appointments = state.appointments.filter(x => x.id !== b.getAttribute('data-del-appt')); saveState(); renderAll(); }
   });
 
+  document.getElementById('cfgHasAlexa').addEventListener('change', (e) => {
+    state.hasAlexa = e.target.checked;
+    if (state.hasAlexa && !state.alexaCode) state.alexaCode = String(Math.floor(1000 + Math.random() * 9000));
+    document.getElementById('alexaCodeBox').classList.toggle('hidden', !state.hasAlexa);
+    document.getElementById('cfgAlexaCode').textContent = state.alexaCode || '----';
+  });
+
   document.getElementById('btnSaveCfg').addEventListener('click', () => {
     state.userName = document.getElementById('cfgName').value.trim() || state.userName;
     state.supportPhone = document.getElementById('cfgPhone').value.trim();
@@ -614,14 +647,16 @@
     state.requireQr = document.getElementById('cfgReqQr').checked;
     state.requirePhoto = document.getElementById('cfgReqPhoto').checked;
     state.continuousVoice = document.getElementById('cfgContVoice').checked;
-        saveState();
-    sync('save_profile', {
-      userName: state.userName, supportPhone: state.supportPhone, supportEmail: state.supportEmail,
-      allergies: state.allergies, sensoryMode: state.sensoryMode, voiceRate: state.voiceRate,
-      requireQr: state.requireQr, requirePhoto: state.requirePhoto, continuousVoice: state.continuousVoice
-    });
+    state.hasAlexa = document.getElementById('cfgHasAlexa').checked;
+    saveState();
+    sync('save_profile', buildProfilePayload());
     renderAll();
     toast('Configurações salvas e sincronizadas!');
+  });
+
+  document.getElementById('btnSyncNow').addEventListener('click', () => {
+    if (!state.userEmail) { toast('Entre com o Gmail na Tela Inicial para sincronizar.'); return; }
+    loadFromSheets(state.userEmail);
   });
 
   document.getElementById('btnResetSetup').addEventListener('click', showSetup);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'meu-cuidado-v6';
+const CACHE_NAME = 'meu-cuidado-v7';
 const ASSETS = ['./', './index.html', './app.js', './manifest.json', './alexa_icon_108x108.png', './alexa_icon_512x512.png'];
 
 self.addEventListener('install', (e) => {
